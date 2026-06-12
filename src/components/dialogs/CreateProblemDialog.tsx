@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { X } from "lucide-react";
 import { useCustomProblemsStore } from "@/store/customProblemsStore";
 import { useAppStore } from "@/store/appStore";
 import { useCanvasStore } from "@/store/canvasStore";
+import { ModalShell } from "./ModalShell";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 interface CreateProblemDialogProps {
   open: boolean;
@@ -17,7 +19,6 @@ export function CreateProblemDialog({ open, onClose }: CreateProblemDialogProps)
   const addProblem = useCustomProblemsStore((s) => s.addProblem);
   const setSelectedProblem = useAppStore((s) => s.setSelectedProblem);
   const showToast = useAppStore((s) => s.showToast);
-  const titleRef = useRef<HTMLInputElement>(null);
 
   const [title, setTitle] = useState("");
   const [difficulty, setDifficulty] = useState<"Easy" | "Medium" | "Hard">("Medium");
@@ -29,27 +30,29 @@ export function CreateProblemDialog({ open, onClose }: CreateProblemDialogProps)
   const [users, setUsers] = useState("10M DAU");
   const [constraintsText, setConstraintsText] = useState("");
   const [tagsText, setTagsText] = useState("");
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  const [prevOpen, setPrevOpen] = useState(false);
 
-  // Reset form and focus when dialog opens
-  useEffect(() => {
-    if (open) {
-      setTitle("");
-      setDifficulty("Medium");
-      setDescription("");
-      setReadsPerSec(10000);
-      setWritesPerSec(1000);
-      setStorageGB(1000);
-      setLatencyMs(200);
-      setUsers("10M DAU");
-      setConstraintsText("");
-      setTagsText("");
-      setTimeout(() => titleRef.current?.focus(), 50);
-    }
-  }, [open]);
+  // Reset the form when the dialog opens (render-time adjustment — focus is
+  // handled by ModalShell via data-autofocus)
+  if (open && !prevOpen) {
+    setPrevOpen(true);
+    setTitle("");
+    setDifficulty("Medium");
+    setDescription("");
+    setReadsPerSec(10000);
+    setWritesPerSec(1000);
+    setStorageGB(1000);
+    setLatencyMs(200);
+    setUsers("10M DAU");
+    setConstraintsText("");
+    setTagsText("");
+    setClearConfirmOpen(false);
+  } else if (!open && prevOpen) {
+    setPrevOpen(false);
+  }
 
-  if (!open) return null;
-
-  const handleCreate = () => {
+  const createProblem = () => {
     const trimmedTitle = title.trim();
     if (!trimmedTitle) return;
 
@@ -79,25 +82,34 @@ export function CreateProblemDialog({ open, onClose }: CreateProblemDialogProps)
     onClose();
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Escape") onClose();
+  const handleCreate = () => {
+    if (!title.trim()) return;
+    // Creating a problem clears the canvas — ask before destroying work
+    const { nodes, edges } = useCanvasStore.getState();
+    if (nodes.length > 0 || edges.length > 0) {
+      setClearConfirmOpen(true);
+      return;
+    }
+    createProblem();
   };
 
   const inputClass =
     "w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-xs text-zinc-100 placeholder-zinc-500 outline-none focus:border-cyan-500";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" onKeyDown={handleKeyDown}>
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-
-      {/* Dialog */}
-      <div className="relative z-10 w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-900 p-5 shadow-lg">
+    <>
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      panelClassName="max-w-lg p-5"
+      ariaLabel="Create custom problem"
+    >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-zinc-100">Create Custom Problem</h2>
           <button
             onClick={onClose}
             className="flex h-6 w-6 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+            aria-label="Close"
           >
             <X className="h-4 w-4" />
           </button>
@@ -108,10 +120,10 @@ export function CreateProblemDialog({ open, onClose }: CreateProblemDialogProps)
           <div>
             <label className="mb-1 block text-xs text-zinc-400">Title *</label>
             <input
-              ref={titleRef}
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              data-autofocus
               className={inputClass}
               placeholder="e.g. Real-time Collaboration Editor"
             />
@@ -247,7 +259,17 @@ export function CreateProblemDialog({ open, onClose }: CreateProblemDialogProps)
             Create Problem
           </button>
         </div>
-      </div>
-    </div>
+    </ModalShell>
+
+    <ConfirmDialog
+      open={clearConfirmOpen}
+      title="Clear canvas and create problem?"
+      message="Creating this problem clears the current canvas. Your existing components and connections will be removed."
+      confirmText="Clear & create"
+      danger
+      onConfirm={createProblem}
+      onClose={() => setClearConfirmOpen(false)}
+    />
+    </>
   );
 }

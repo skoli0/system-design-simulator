@@ -1,53 +1,72 @@
 import type { Node, Edge } from "@xyflow/react";
 import type { ComponentNodeData } from "@/store/canvasStore";
-import type { CategoryScore } from "@/types/scoring";
+import type { CategoryScore, ScoringGraph } from "@/types/scoring";
 
+// Point budget (max 20): CDN 3 + cache-before-DB 4 + hop count 4 + DNS 1 +
+// async offloading 4 + load balancer 2 + low-latency store 2 = 20
 export function scoreLatency(
   nodes: Node<ComponentNodeData>[],
-  edges: Edge[]
+  edges: Edge[],
+  graph: ScoringGraph
 ): CategoryScore {
   const feedback: string[] = [];
   const passed: string[] = [];
   let score = 0;
 
-  const componentIds = nodes.map((n) => n.data.componentId);
+  const connectedNodes = nodes.filter((n) => graph.reachable.has(n.id));
+  const connectedIds = new Set(connectedNodes.map((n) => n.data.componentId));
+  const placedIds = new Set(nodes.map((n) => n.data.componentId));
 
   // CDN for static content (3 pts)
-  if (componentIds.includes("cdn")) {
+  if (connectedIds.has("cdn")) {
     score += 3;
     passed.push("CDN serves content from edge locations, cutting latency from 200ms+ to <20ms for static assets");
+  } else if (placedIds.has("cdn")) {
+    feedback.push(
+      "You placed a CDN but it isn't connected to the request path. Put it in front of your origin (e.g., DNS → CDN → Load Balancer) so users actually hit the edge first."
+    );
   } else {
     feedback.push(
       "Add a CDN (CloudFront, Cloudflare, Google Cloud CDN) to serve static content from edge locations close to users. Without a CDN, every request travels to your origin server — a user in Tokyo hitting a US-East server adds 150-200ms of network latency alone."
     );
   }
 
-  // Cache before DB (3 pts)
-  const cacheNodes = nodes.filter((n) => n.data.componentId === "cache");
-  const dbNodes = nodes.filter(
+  // Cache before DB (4 pts)
+  const adj = graph.adjacency;
+  const cacheNodes = connectedNodes.filter((n) => n.data.componentId === "cache");
+  const dbNodes = connectedNodes.filter(
     (n) => n.data.componentId === "sql-db" || n.data.componentId === "nosql-db"
   );
-  // Build adjacency for reachability checks
-  const adj = new Map<string, string[]>();
-  for (const node of nodes) adj.set(node.id, []);
-  for (const edge of edges) adj.get(edge.source)?.push(edge.target);
+  const cacheNodeIds = new Set(cacheNodes.map((c) => c.id));
   const dbNodeIds = new Set(dbNodes.map((d) => d.id));
-  // Check: cache is source of an edge AND a DB is reachable within 2 hops from that cache
+  // (a) Look-through wiring: a DB is reachable within 2 hops from a cache
+  const cacheInFront = cacheNodes.some((c) => {
+    const hop1 = adj.get(c.id) ?? [];
+    if (hop1.some((id) => dbNodeIds.has(id))) return true;
+    return hop1.some((mid) => (adj.get(mid) ?? []).some((id) => dbNodeIds.has(id)));
+  });
+  // (b) Cache-aside wiring: some node fans out to both a cache and a DB
+  //     (the app checks the cache first, falls back to the DB on a miss)
+  const cacheAside = connectedNodes.some((n) => {
+    const children = adj.get(n.id) ?? [];
+    return (
+      children.some((id) => cacheNodeIds.has(id)) &&
+      children.some((id) => dbNodeIds.has(id))
+    );
+  });
   const cacheBeforeDB =
-    cacheNodes.length > 0 &&
-    dbNodes.length > 0 &&
-    cacheNodes.some((c) => {
-      const hop1 = adj.get(c.id) ?? [];
-      if (hop1.some((id) => dbNodeIds.has(id))) return true;
-      return hop1.some((mid) => (adj.get(mid) ?? []).some((id) => dbNodeIds.has(id)));
-    });
+    cacheNodes.length > 0 && dbNodes.length > 0 && (cacheInFront || cacheAside);
   if (cacheBeforeDB) {
-    score += 3;
+    score += 4;
     passed.push("Cache intercepts reads before hitting the database — memory access (~1ms) vs disk (~5-10ms)");
   } else if (cacheNodes.length > 0) {
     score += 1;
     feedback.push(
       "Your cache exists but isn't positioned to intercept reads before the database. Connect your App Server to both Cache and DB so it checks the cache first. A cache hit returns in ~1ms; a DB query takes 5-10ms or more — that's a 5-10x latency improvement on every cached read."
+    );
+  } else if (placedIds.has("cache")) {
+    feedback.push(
+      "You placed a Cache but it isn't connected to the request path. Connect your App Server to both Cache and DB (cache-aside) so reads check the cache first."
     );
   } else {
     feedback.push(
@@ -55,14 +74,18 @@ export function scoreLatency(
     );
   }
 
-  // Minimal hops — fewer than 6 layers (3 pts)
-  const maxDepth = computeMaxDepth(nodes, edges);
-  if (maxDepth <= 4) {
-    score += 3;
-    passed.push("Request path has very few hops (" + maxDepth + " layers) — minimal serialized latency");
-  } else if (maxDepth <= 5) {
+  // Minimal hops on the synchronous request path (4 pts; async edges excluded)
+  const { depth: maxDepth, cyclic } = computeMaxDepth(nodes, edges);
+  if (cyclic) {
+    feedback.push(
+      "Your design contains a cycle — requests could loop forever, so the hop count can't be credited. Break the cycle (for example, make the back-edge asynchronous via a queue) to earn these points."
+    );
+  } else if (maxDepth <= 6) {
+    score += 4;
+    passed.push("Request path has a lean hop count (" + maxDepth + " layers) — minimal serialized latency");
+  } else if (maxDepth <= 8) {
     score += 2;
-    passed.push("Request path has acceptable hop count (" + maxDepth + " layers)");
+    passed.push("Request path has an acceptable hop count (" + maxDepth + " layers)");
   } else {
     feedback.push(
       `Request path has ${maxDepth} sequential hops — each hop adds latency (network round-trip + processing time). Consider whether all layers are necessary, or if some can be combined. Every unnecessary hop adds 2-10ms to p99 latency.`
@@ -70,21 +93,27 @@ export function scoreLatency(
   }
 
   // DNS entry point (1 pt)
-  const hasDNS = componentIds.includes("dns");
-  if (hasDNS) {
+  if (connectedIds.has("dns")) {
     score += 1;
     passed.push("DNS-based geo-routing can direct users to the nearest region, reducing cross-region latency");
+  } else if (placedIds.has("dns")) {
+    feedback.push(
+      "You placed DNS but it isn't connected to the request path. Make it the entry point (DNS → CDN/Load Balancer) so geo-routing actually applies."
+    );
   } else {
     feedback.push(
       "Add DNS with geo-routing (Route 53, Cloud DNS) to direct users to the nearest region. DNS alone isn't a latency optimization, but DNS-based geo-routing can reduce cross-region latency by 50-150ms for international users."
     );
   }
 
-  // Async offloading heavy work (3 pts)
-  const hasQueue = componentIds.includes("message-queue");
-  if (hasQueue) {
-    score += 3;
+  // Async offloading heavy work (4 pts)
+  if (connectedIds.has("message-queue")) {
+    score += 4;
     passed.push("Message queue offloads heavy processing from the request path, keeping responses fast");
+  } else if (placedIds.has("message-queue")) {
+    feedback.push(
+      "You placed a Message Queue but it isn't connected to the request path. Connect a producer (e.g., App Server) to it so heavy work can actually be enqueued instead of blocking responses."
+    );
   } else {
     feedback.push(
       "Add a Message Queue to offload heavy processing (transcoding, emails, analytics) from the synchronous request path. If your API handler does all the work inline, a 2-second transcoding job blocks the response for 2 seconds. Enqueue it and respond immediately."
@@ -92,40 +121,64 @@ export function scoreLatency(
   }
 
   // Load balancer for connection reuse (2 pts)
-  const hasLB = componentIds.includes("load-balancer");
-  if (hasLB) {
+  if (connectedIds.has("load-balancer")) {
     score += 2;
     passed.push("Load balancer enables connection pooling and keep-alive, though it adds an extra network hop");
+  } else if (placedIds.has("load-balancer")) {
+    feedback.push(
+      "You placed a Load Balancer but it isn't connected to the request path. Wire traffic through it so connection pooling and keep-alive actually apply."
+    );
   } else {
     feedback.push(
       "Add a Load Balancer for connection pooling and keep-alive support. LBs add an extra hop but maintain warm connections to backends, avoiding fresh TCP+TLS handshakes (30-100ms overhead) on each request."
     );
   }
 
-  // Low-latency data store choice (5 pts) — compensates for DNS/LB reductions
+  // Low-latency data store choice (2 pts) — must be on a connected path
   const hasLowLatencyStore =
-    componentIds.includes("cache") || componentIds.includes("nosql-db");
+    connectedIds.has("cache") || connectedIds.has("nosql-db");
   if (hasLowLatencyStore) {
-    score += 5;
+    score += 2;
     passed.push("Using low-latency data stores (in-memory cache or NoSQL) for fast data access");
+  } else if (placedIds.has("cache") || placedIds.has("nosql-db")) {
+    feedback.push(
+      "You placed a low-latency store (Cache/NoSQL) but it isn't connected to the request path. Connect it so your hot path actually benefits from fast reads."
+    );
   } else {
     feedback.push(
-      "Consider using low-latency data stores for your hot path. Redis serves reads in <1ms, DynamoDB in <5ms single-digit milliseconds, while a complex SQL JOIN can take 50-100ms. Pick the right store for your access pattern."
+      "Consider using low-latency data stores for your hot path. Redis serves reads in <1ms and DynamoDB in single-digit milliseconds, while a complex SQL JOIN can take 50-100ms. Pick the right store for your access pattern."
     );
   }
 
   return { category: "Latency", score, maxScore: 20, feedback, passed };
 }
 
-function computeMaxDepth(nodes: Node<ComponentNodeData>[], edges: Edge[]): number {
+/**
+ * Longest chain of synchronous hops. Async edges (queues, notifications,
+ * monitoring) are excluded — they aren't user-facing latency. Edges touching
+ * unknown nodes (text annotations) are ignored, and parallel edges deduped.
+ * If a cycle prevents full processing, depth is reported as the worst case
+ * (every node serialized) and flagged so the rule doesn't award hop bonuses.
+ */
+function computeMaxDepth(
+  nodes: Node<ComponentNodeData>[],
+  edges: Edge[]
+): { depth: number; cyclic: boolean } {
+  const nodeIds = new Set(nodes.map((n) => n.id));
   const adjacency = new Map<string, string[]>();
   const inDegree = new Map<string, number>();
   for (const node of nodes) {
     adjacency.set(node.id, []);
     inDegree.set(node.id, 0);
   }
+  const seen = new Set<string>();
   for (const edge of edges) {
-    adjacency.get(edge.source)?.push(edge.target);
+    if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) continue;
+    if (edge.data?.async === true) continue; // async hops aren't user-facing latency
+    const key = `${edge.source}->${edge.target}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    adjacency.get(edge.source)!.push(edge.target);
     inDegree.set(edge.target, (inDegree.get(edge.target) ?? 0) + 1);
   }
 
@@ -141,15 +194,21 @@ function computeMaxDepth(nodes: Node<ComponentNodeData>[], edges: Edge[]): numbe
     }
   }
 
-  while (queue.length > 0) {
-    const id = queue.shift()!;
+  let head = 0;
+  while (head < queue.length) {
+    const id = queue[head++];
     for (const child of adjacency.get(id) ?? []) {
       const newDist = (dist.get(id) ?? 1) + 1;
       if (newDist > (dist.get(child) ?? 0)) dist.set(child, newDist);
-      remaining.set(child, (remaining.get(child) ?? 1) - 1);
-      if (remaining.get(child) === 0) queue.push(child);
+      const newDeg = (remaining.get(child) ?? 1) - 1;
+      remaining.set(child, newDeg);
+      if (newDeg === 0) queue.push(child);
     }
   }
 
-  return Math.max(0, ...dist.values());
+  if (head < nodes.length) {
+    // Some nodes never resolved — there's a cycle; assume worst-case depth.
+    return { depth: nodes.length, cyclic: true };
+  }
+  return { depth: Math.max(0, ...dist.values()), cyclic: false };
 }

@@ -123,11 +123,11 @@ export function LearningPath() {
                     <span className={`text-xs font-semibold ${TIER_COLORS[tier.name] ?? "text-zinc-300"}`}>
                       {tier.name}
                     </span>
-                    <span className="text-[10px] text-zinc-500">
+                    <span className="text-[10px] text-zinc-400">
                       {completedCount}/{totalCount}
                     </span>
                   </div>
-                  <p className="text-[10px] text-zinc-500 mt-0.5">{tier.description}</p>
+                  <p className="text-[10px] text-zinc-400 mt-0.5">{tier.description}</p>
                   {/* Progress bar */}
                   <div className="mt-1.5 h-1 w-full rounded-full bg-zinc-700">
                     <div
@@ -169,6 +169,8 @@ export function LearningPath() {
                             {/* Completion toggle */}
                             <button
                               onClick={(e) => toggleCompleted(pid, e)}
+                              aria-label={`Mark ${problem.title} as ${isCompleted ? "not completed" : "completed"}`}
+                              aria-pressed={isCompleted}
                               className={`h-3.5 w-3.5 shrink-0 rounded border transition-colors ${
                                 isCompleted
                                   ? "border-cyan-500 bg-cyan-500"
@@ -215,7 +217,7 @@ export function LearningPath() {
                             {concepts.map((c) => (
                               <span
                                 key={c}
-                                className="rounded bg-zinc-800 px-1 py-0.5 text-[10px] text-zinc-500"
+                                className="rounded bg-zinc-800 px-1 py-0.5 text-[10px] text-zinc-400"
                               >
                                 {c}
                               </span>

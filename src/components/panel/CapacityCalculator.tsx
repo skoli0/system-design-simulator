@@ -127,6 +127,10 @@ export function CapacityCalculator() {
           value={formatNumber(estimates.peakQps)}
           highlight
         />
+        <ResultRow
+          label="Write QPS"
+          value={formatNumber(estimates.writeQPS)}
+        />
       </div>
 
       <Separator className="bg-zinc-800" />

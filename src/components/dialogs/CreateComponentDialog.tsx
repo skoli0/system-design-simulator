@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { X, Server } from "lucide-react";
 import { useCustomComponentsStore } from "@/store/customComponentsStore";
 import { useAppStore } from "@/store/appStore";
 import { COMPONENT_CATEGORIES } from "@/data/components";
 import { ICON_MAP } from "@/lib/icons";
 import type { ComponentCategory } from "@/types/component";
+import { ModalShell } from "./ModalShell";
 
 interface CreateComponentDialogProps {
   open: boolean;
@@ -18,7 +19,6 @@ const ICON_OPTIONS = Object.keys(ICON_MAP);
 export function CreateComponentDialog({ open, onClose }: CreateComponentDialogProps) {
   const addComponent = useCustomComponentsStore((s) => s.addComponent);
   const showToast = useAppStore((s) => s.showToast);
-  const labelRef = useRef<HTMLInputElement>(null);
 
   const [label, setLabel] = useState("");
   const [category, setCategory] = useState<ComponentCategory>("compute");
@@ -28,22 +28,23 @@ export function CreateComponentDialog({ open, onClose }: CreateComponentDialogPr
   const [scalable, setScalable] = useState(true);
   const [stateful, setStateful] = useState(false);
   const [description, setDescription] = useState("");
+  const [prevOpen, setPrevOpen] = useState(false);
 
-  useEffect(() => {
-    if (open) {
-      setLabel("");
-      setCategory("compute");
-      setIcon("Box");
-      setMaxQPS(5000);
-      setLatencyMs(20);
-      setScalable(true);
-      setStateful(false);
-      setDescription("");
-      setTimeout(() => labelRef.current?.focus(), 50);
-    }
-  }, [open]);
-
-  if (!open) return null;
+  // Reset the form when the dialog opens (render-time adjustment — focus is
+  // handled by ModalShell via data-autofocus)
+  if (open && !prevOpen) {
+    setPrevOpen(true);
+    setLabel("");
+    setCategory("compute");
+    setIcon("Box");
+    setMaxQPS(5000);
+    setLatencyMs(20);
+    setScalable(true);
+    setStateful(false);
+    setDescription("");
+  } else if (!open && prevOpen) {
+    setPrevOpen(false);
+  }
 
   const handleCreate = () => {
     const trimmedLabel = label.trim();
@@ -64,25 +65,24 @@ export function CreateComponentDialog({ open, onClose }: CreateComponentDialogPr
     onClose();
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Escape") onClose();
-  };
-
   const inputClass =
     "w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-xs text-zinc-100 placeholder-zinc-500 outline-none focus:border-cyan-500";
 
   const SelectedIcon = ICON_MAP[icon] ?? Server;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" onKeyDown={handleKeyDown}>
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-
-      <div className="relative z-10 w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-900 p-5 shadow-lg">
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      panelClassName="max-w-lg p-5"
+      ariaLabel="Create custom component"
+    >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-zinc-100">Create Custom Component</h2>
           <button
             onClick={onClose}
             className="flex h-6 w-6 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+            aria-label="Close"
           >
             <X className="h-4 w-4" />
           </button>
@@ -93,10 +93,10 @@ export function CreateComponentDialog({ open, onClose }: CreateComponentDialogPr
           <div>
             <label className="mb-1 block text-xs text-zinc-400">Label *</label>
             <input
-              ref={labelRef}
               type="text"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
+              data-autofocus
               className={inputClass}
               placeholder="e.g. Vector Database"
             />
@@ -217,7 +217,6 @@ export function CreateComponentDialog({ open, onClose }: CreateComponentDialogPr
             Create Component
           </button>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }

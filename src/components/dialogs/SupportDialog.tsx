@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Image from "next/image";
 import { X, Copy, Check, Coffee, Heart } from "lucide-react";
+import { ModalShell } from "./ModalShell";
 
 interface SupportDialogProps {
   open: boolean;
@@ -32,18 +33,9 @@ const QUICK_AMOUNTS = [
 export function SupportDialog({ open, onClose }: SupportDialogProps) {
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  useEffect(() => {
-    if (!open) setCopied(false);
-  }, [open]);
+  // Reset the "copied" tick when the dialog closes (render-time adjustment,
+  // no effect needed)
+  if (!open && copied) setCopied(false);
 
   const handleCopy = async () => {
     try {
@@ -55,13 +47,16 @@ export function SupportDialog({ open, onClose }: SupportDialogProps) {
     }
   };
 
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-
-      <div className="relative z-10 my-4 w-full max-w-sm overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl">
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      chrome={false}
+      wrapperClassName="z-[60]"
+      backdropClassName="bg-black/70 backdrop-blur-sm"
+      panelClassName="max-w-sm rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl"
+      ariaLabel="Support this project"
+    >
         {/* Decorative gradient band */}
         <div className="relative h-20 overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/25 via-sky-500/10 to-blue-500/5" />
@@ -148,7 +143,6 @@ export function SupportDialog({ open, onClose }: SupportDialogProps) {
             <span className="font-medium text-zinc-300">Vijay Gupta</span>
           </div>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }

@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
+import { safeLocalStorage } from "./safeStorage";
 
 export type ToastType = "success" | "error" | "info";
 
@@ -14,7 +15,6 @@ interface AppState {
   rightPanelOpen: boolean;
   activeLeftTab: "components" | "problems" | "learn";
   activeRightTab: "properties" | "simulation" | "score" | "capacity" | "tradeoffs";
-  theme: "dark" | "light";
   toast: ToastData | null;
 
   setSelectedProblem: (id: string) => void;
@@ -23,11 +23,12 @@ interface AppState {
   setLeftSidebarOpen: (open: boolean) => void;
   setActiveLeftTab: (tab: AppState["activeLeftTab"]) => void;
   setActiveRightTab: (tab: AppState["activeRightTab"]) => void;
-  toggleTheme: () => void;
   showToast: (message: string, type: ToastType) => void;
   clearToast: () => void;
 }
 
+// Single owner of the toast auto-dismiss timer (4s). showToast resets it,
+// clearToast cancels it — no other code should schedule toast dismissal.
 let toastTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
 export const useAppStore = create<AppState>()(
@@ -38,7 +39,6 @@ export const useAppStore = create<AppState>()(
       rightPanelOpen: true,
       activeLeftTab: "components",
       activeRightTab: "properties",
-      theme: "dark",
       toast: null,
 
       setSelectedProblem: (id) => set({ selectedProblemId: id }),
@@ -49,11 +49,6 @@ export const useAppStore = create<AppState>()(
       setLeftSidebarOpen: (open) => set({ leftSidebarOpen: open }),
       setActiveLeftTab: (tab) => set({ activeLeftTab: tab }),
       setActiveRightTab: (tab) => set({ activeRightTab: tab }),
-      toggleTheme: () =>
-        set((s) => {
-          const newTheme = s.theme === "dark" ? "light" : "dark";
-          return { theme: newTheme };
-        }),
       showToast: (message, type) => {
         if (toastTimeoutId !== null) {
           clearTimeout(toastTimeoutId);
@@ -74,17 +69,23 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "systemsim-app",
+      version: 1,
+      skipHydration: true,
+      storage: createJSONStorage(() => safeLocalStorage),
+      // The app is dark-only; older persisted state may still contain a
+      // `theme` key — strip it so it never leaks back into the store.
+      migrate: (persisted) => {
+        if (persisted && typeof persisted === "object" && "theme" in persisted) {
+          const { theme: _theme, ...rest } = persisted as Record<string, unknown>;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          return rest as any;
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return persisted as any;
+      },
       partialize: (state) => ({
         selectedProblemId: state.selectedProblemId,
-        theme: state.theme,
       }),
     }
   )
 );
-
-// Side effect: sync theme changes to document.documentElement
-useAppStore.subscribe((state, prevState) => {
-  if (state.theme !== prevState.theme && typeof document !== "undefined") {
-    document.documentElement.classList.toggle("dark", state.theme === "dark");
-  }
-});

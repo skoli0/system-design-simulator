@@ -6,7 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
-import { Info, Trash2, Lightbulb, ChevronDown, ChevronRight, CheckSquare, BookOpen, Target, AlertTriangle, MessageCircle, Layers } from "lucide-react";
+import { Info, Trash2, Lightbulb, ChevronDown, ChevronRight, CheckSquare, BookOpen, Target, AlertTriangle, MessageCircle, Layers, Pencil } from "lucide-react";
 import { useCanvasStore, type ComponentNodeData, type CustomEdgeData } from "@/store/canvasStore";
 import { useAppStore } from "@/store/appStore";
 import { getProblemById } from "@/data/problems";
@@ -125,6 +125,7 @@ function EdgePropertiesPanel() {
   const selectedEdgeId = useCanvasStore((s) => s.selectedEdgeId);
   const edges = useCanvasStore((s) => s.edges);
   const updateEdgeData = useCanvasStore((s) => s.updateEdgeData);
+  const deleteEdge = useCanvasStore((s) => s.deleteEdge);
 
   const selectedEdge = edges.find((e) => e.id === selectedEdgeId);
   if (!selectedEdge) return null;
@@ -196,6 +197,17 @@ function EdgePropertiesPanel() {
             {data.async ? "Dashed line — asynchronous (e.g. message queue)" : "Solid line — synchronous (e.g. HTTP call)"}
           </p>
         </div>
+
+        {/* Remove connection — clears selection via the store */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => deleteEdge(selectedEdge.id)}
+          className="w-full gap-1.5 border-zinc-700 text-rose-400 hover:bg-zinc-800 hover:text-rose-300"
+        >
+          <Trash2 className="h-3 w-3" />
+          Remove Connection
+        </Button>
       </div>
     </div>
   );
@@ -272,9 +284,22 @@ function PropertiesTab() {
                 Text Note
               </p>
               <p className="mt-0.5 text-xs text-zinc-500">
-                Double-click on canvas to edit
+                Double-click (or tap) on canvas to edit
               </p>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                window.dispatchEvent(
+                  new CustomEvent("textnode:edit", { detail: { id: selectedNode.id } })
+                )
+              }
+              className="w-full gap-1.5 border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+            >
+              <Pencil className="h-3 w-3" />
+              Edit text
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -305,31 +330,29 @@ function PropertiesTab() {
               </p>
             </div>
 
-            {/* Replicas slider */}
-            {data.scalable && (
-              <div>
-                <div className="mb-1.5 flex items-center justify-between">
-                  <label className="text-xs text-zinc-400">Replicas</label>
-                  <span className="font-mono text-xs text-cyan-500">
-                    {data.replicas as number}
-                  </span>
-                </div>
-                <Slider
-                  aria-label="Replicas"
-                  value={[data.replicas as number]}
-                  onValueChange={(v) =>
-                    updateNodeData(selectedNode.id, { replicas: Array.isArray(v) ? v[0] : v })
-                  }
-                  min={1}
-                  max={20}
-                  step={1}
-                  className=""
-                />
-                <p className="mt-1 text-[11px] text-zinc-400">
-                  Effective capacity: {(data.maxQPS as number) === Infinity ? "\u221e" : new Intl.NumberFormat("en-US").format((data.maxQPS as number) * (data.replicas as number))} QPS
-                </p>
+            {/* Replicas slider \u2014 shown for every component node */}
+            <div>
+              <div className="mb-1.5 flex items-center justify-between">
+                <label className="text-xs text-zinc-400">Replicas</label>
+                <span className="font-mono text-xs text-cyan-500">
+                  {data.replicas as number}
+                </span>
               </div>
-            )}
+              <Slider
+                aria-label="Replicas"
+                value={[data.replicas as number]}
+                onValueChange={(v) =>
+                  updateNodeData(selectedNode.id, { replicas: Array.isArray(v) ? v[0] : v })
+                }
+                min={1}
+                max={20}
+                step={1}
+                className=""
+              />
+              <p className="mt-1 text-[11px] text-zinc-400">
+                Effective capacity: {(data.maxQPS as number) === Infinity ? "\u221e" : new Intl.NumberFormat("en-US").format((data.maxQPS as number) * (data.replicas as number))} QPS
+              </p>
+            </div>
 
             {/* Info */}
             <div className="space-y-1">

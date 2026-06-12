@@ -31,7 +31,7 @@ export function InterviewPhasePanel() {
           <PhaseIcon icon={phase.icon} />
           <div>
             <p className="text-xs font-semibold text-zinc-200">{phase.name}</p>
-            <p className="text-[10px] text-zinc-500">{phase.description}</p>
+            <p className="text-[10px] text-zinc-400">{phase.description}</p>
           </div>
         </div>
       </div>

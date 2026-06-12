@@ -1,12 +1,14 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { X, Trash2, Download, Upload } from "lucide-react";
 import {
   useSavedDesignsStore,
   getProblemTitle,
   type SavedDesign,
 } from "@/store/savedDesignsStore";
+import { ModalShell } from "./ModalShell";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 interface LoadDialogProps {
   open: boolean;
@@ -56,8 +58,8 @@ function DesignRow({
         </span>
       </button>
 
-      {/* Actions */}
-      <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+      {/* Actions — visible on touch, hover-revealed on pointer devices */}
+      <div className="flex shrink-0 items-center gap-1 opacity-60 transition-opacity group-focus-within:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100">
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -65,6 +67,7 @@ function DesignRow({
           }}
           className="flex h-6 w-6 items-center justify-center rounded text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300"
           title="Export as JSON"
+          aria-label={`Export ${design.name} as JSON`}
         >
           <Download className="h-3 w-3" />
         </button>
@@ -75,6 +78,7 @@ function DesignRow({
           }}
           className="flex h-6 w-6 items-center justify-center rounded text-zinc-500 hover:bg-zinc-700 hover:text-rose-400"
           title="Delete"
+          aria-label={`Delete ${design.name}`}
         >
           <Trash2 className="h-3 w-3" />
         </button>
@@ -90,8 +94,7 @@ export function LoadDialog({ open, onClose }: LoadDialogProps) {
   const exportDesign = useSavedDesignsStore((s) => s.exportDesign);
   const importDesign = useSavedDesignsStore((s) => s.importDesign);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  if (!open) return null;
+  const [pendingDelete, setPendingDelete] = useState<SavedDesign | null>(null);
 
   const handleExport = (id: string, name: string) => {
     const json = exportDesign(id);
@@ -128,15 +131,13 @@ export function LoadDialog({ open, onClose }: LoadDialogProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60"
-        onClick={onClose}
-      />
-
-      {/* Dialog */}
-      <div className="relative z-10 flex w-full max-w-lg flex-col rounded-lg border border-zinc-800 bg-zinc-900 shadow-lg" style={{ maxHeight: "80vh" }}>
+    <>
+      <ModalShell
+        open={open}
+        onClose={onClose}
+        panelClassName="flex max-w-lg flex-col p-0"
+        ariaLabel="Load design"
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-4">
           <h2 className="text-sm font-semibold text-zinc-100">
@@ -153,6 +154,7 @@ export function LoadDialog({ open, onClose }: LoadDialogProps) {
             <button
               onClick={onClose}
               className="flex h-6 w-6 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+              aria-label="Close"
             >
               <X className="h-4 w-4" />
             </button>
@@ -175,7 +177,7 @@ export function LoadDialog({ open, onClose }: LoadDialogProps) {
                   key={design.id}
                   design={design}
                   onLoad={() => handleLoad(design.id)}
-                  onDelete={() => deleteDesign(design.id)}
+                  onDelete={() => setPendingDelete(design)}
                   onExport={() => handleExport(design.id, design.name)}
                 />
               ))}
@@ -191,7 +193,19 @@ export function LoadDialog({ open, onClose }: LoadDialogProps) {
           className="hidden"
           onChange={handleFileChange}
         />
-      </div>
-    </div>
+      </ModalShell>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete saved design?"
+        message={`"${pendingDelete?.name ?? ""}" will be permanently deleted. This can't be undone.`}
+        confirmText="Delete"
+        danger
+        onConfirm={() => {
+          if (pendingDelete) deleteDesign(pendingDelete.id);
+        }}
+        onClose={() => setPendingDelete(null)}
+      />
+    </>
   );
 }

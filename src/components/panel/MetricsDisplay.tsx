@@ -1,6 +1,5 @@
 "use client";
 
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useSimulationStore } from "@/store/simulationStore";
 import { useCanvasStore } from "@/store/canvasStore";
 import { Activity } from "lucide-react";
@@ -69,7 +68,9 @@ export function MetricsDisplay() {
         Per-Node Metrics
       </p>
 
-      <ScrollArea className="max-h-[300px]">
+      {/* Plain overflow container: the base-ui ScrollArea viewport needs a
+          definite height, so max-h on the root never actually scrolled. */}
+      <div className="max-h-[300px] overflow-y-auto">
         <div className="space-y-1.5">
           {sortedMetrics.map((m) => {
             const node = nodes.find((n) => n.id === m.nodeId);
@@ -128,7 +129,7 @@ export function MetricsDisplay() {
             );
           })}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }

@@ -1,34 +1,50 @@
 import type { Node, Edge } from "@xyflow/react";
 import type { ComponentNodeData } from "@/store/canvasStore";
-import type { CategoryScore } from "@/types/scoring";
+import type { CategoryScore, ScoringGraph } from "@/types/scoring";
 
+// Point budget (max 20): LB 3 + scalable compute 3 + cache 3 + queue 3 +
+// DB scaling 3 + CDN 3 + LB->compute wiring 2 = 20
 export function scoreScalability(
   nodes: Node<ComponentNodeData>[],
-  edges: Edge[]
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _edges: Edge[],
+  graph: ScoringGraph
 ): CategoryScore {
   const feedback: string[] = [];
   const passed: string[] = [];
   let score = 0;
 
-  const componentIds = nodes.map((n) => n.data.componentId);
-  const hasLB = componentIds.includes("load-balancer");
-  const hasCache = componentIds.includes("cache");
-  const hasQueue = componentIds.includes("message-queue");
-  const hasCDN = componentIds.includes("cdn");
-  const hasScalableCompute = nodes.some(
+  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+  const connectedNodes = nodes.filter((n) => graph.reachable.has(n.id));
+  const connectedIds = new Set(connectedNodes.map((n) => n.data.componentId));
+  const placedIds = new Set(nodes.map((n) => n.data.componentId));
+
+  const hasLB = connectedIds.has("load-balancer");
+  const hasCache = connectedIds.has("cache");
+  const hasQueue = connectedIds.has("message-queue");
+  const hasCDN = connectedIds.has("cdn");
+  const hasScalableCompute = connectedNodes.some(
     (n) => n.data.category === "compute" && n.data.scalable
   );
-  const hasDBScaling =
-    nodes.some(
-      (n) =>
-        (n.data.componentId === "nosql-db" || n.data.componentId === "sql-db") &&
-        (n.data.replicas || 1) > 1
-    );
+  const placedScalableCompute = nodes.some(
+    (n) => n.data.category === "compute" && n.data.scalable
+  );
+  // NoSQL databases scale horizontally out of the box (replicas=1 is fine);
+  // SQL needs explicit read replicas to scale reads.
+  const isDBScalingNode = (n: Node<ComponentNodeData>) =>
+    n.data.componentId === "nosql-db" ||
+    (n.data.componentId === "sql-db" && (n.data.replicas || 1) > 1);
+  const hasDBScaling = connectedNodes.some(isDBScalingNode);
+  const placedDBScaling = nodes.some(isDBScalingNode);
 
   // Check load balancer (3 pts)
   if (hasLB) {
     score += 3;
     passed.push("Load balancer distributes traffic across servers, enabling horizontal scaling");
+  } else if (placedIds.has("load-balancer")) {
+    feedback.push(
+      "You placed a Load Balancer but it isn't connected to the request path. Wire traffic through it (entry → Load Balancer → App Servers) so it can actually distribute load."
+    );
   } else {
     feedback.push(
       "Add a Load Balancer (e.g., AWS ALB, Nginx) to distribute traffic across multiple servers. Without one, a single server handles all requests and becomes a bottleneck — you can't scale horizontally."
@@ -39,6 +55,10 @@ export function scoreScalability(
   if (hasScalableCompute) {
     score += 3;
     passed.push("Horizontally scalable compute layer allows adding capacity on demand");
+  } else if (placedScalableCompute) {
+    feedback.push(
+      "You placed scalable compute (e.g., App Server) but it isn't connected to the request path. Connect it behind your load balancer so it can serve traffic."
+    );
   } else {
     feedback.push(
       "Add stateless App Servers that can scale horizontally behind the load balancer. Stateless servers let you spin up new instances in seconds during traffic spikes, handling 10x load by simply adding more machines."
@@ -49,6 +69,10 @@ export function scoreScalability(
   if (hasCache) {
     score += 3;
     passed.push("Caching layer (Redis/Memcached) absorbs read traffic and reduces backend load");
+  } else if (placedIds.has("cache")) {
+    feedback.push(
+      "You placed a Cache but it isn't connected to the request path. Connect your App Servers to it so reads can actually be absorbed by the cache."
+    );
   } else {
     feedback.push(
       "Add a caching layer (Redis/Memcached) between your App Servers and Database. This can reduce DB load by 80-90% for read-heavy workloads by serving frequently accessed data from memory (~1ms) instead of disk (~5-10ms)."
@@ -59,6 +83,10 @@ export function scoreScalability(
   if (hasQueue) {
     score += 3;
     passed.push("Message queue enables async processing and absorbs traffic spikes");
+  } else if (placedIds.has("message-queue")) {
+    feedback.push(
+      "You placed a Message Queue but it isn't connected to the request path. Connect a producer (e.g., App Server) to it so heavy work can actually be offloaded."
+    );
   } else {
     feedback.push(
       "Add a Message Queue (Kafka, SQS, RabbitMQ) for asynchronous processing. Queues decouple producers from consumers, letting you buffer traffic spikes and process heavy tasks (email, transcoding, analytics) in the background without blocking user requests."
@@ -69,6 +97,10 @@ export function scoreScalability(
   if (hasDBScaling) {
     score += 3;
     passed.push("Database layer supports read scaling via NoSQL or read replicas");
+  } else if (placedDBScaling) {
+    feedback.push(
+      "You have a scalable database (NoSQL or replicated SQL) but it isn't connected to the request path. Connect your App Servers to it so queries actually reach it."
+    );
   } else {
     feedback.push(
       "Scale your database layer — use a NoSQL database (DynamoDB, Cassandra) for automatic horizontal scaling, or add SQL read replicas to distribute query load. A single SQL primary becomes a bottleneck beyond ~10K QPS."
@@ -79,6 +111,10 @@ export function scoreScalability(
   if (hasCDN) {
     score += 3;
     passed.push("CDN offloads static content delivery from origin servers");
+  } else if (placedIds.has("cdn")) {
+    feedback.push(
+      "You placed a CDN but it isn't connected to the request path. Put it in front of your origin (e.g., DNS → CDN → Load Balancer) so static content is actually served from the edge."
+    );
   } else {
     feedback.push(
       "Add a CDN (CloudFront, Cloudflare) to offload static content delivery from your origin servers. CDNs serve cached content from 200+ edge locations worldwide, reducing origin load by 60-80% and cutting latency for global users from 200ms+ to under 20ms."
@@ -86,20 +122,46 @@ export function scoreScalability(
   }
 
   // Check LB→compute connectivity (2 pts)
-  const lbToCompute = hasLB && hasScalableCompute && edges.some(
-    (e) => {
-      const sourceNode = nodes.find((n) => n.id === e.source);
-      const targetNode = nodes.find((n) => n.id === e.target);
-      return (
-        sourceNode?.data.componentId === "load-balancer" &&
-        targetNode?.data.category === "compute"
-      ) || (
-        // LB → gateway → compute also counts
-        sourceNode?.data.componentId === "load-balancer" &&
-        (targetNode?.data.componentId === "api-gateway" || targetNode?.data.componentId === "rate-limiter")
-      );
+  // True when the LB feeds a compute node directly, or feeds an API gateway /
+  // rate limiter that itself reaches a compute node downstream.
+  const reachesCompute = (startId: string): boolean => {
+    const visited = new Set<string>([startId]);
+    const queue: string[] = [startId];
+    let head = 0;
+    while (head < queue.length) {
+      const id = queue[head++];
+      for (const child of graph.adjacency.get(id) ?? []) {
+        if (visited.has(child)) continue;
+        visited.add(child);
+        if (nodeMap.get(child)?.data.category === "compute") return true;
+        queue.push(child);
+      }
     }
-  );
+    return false;
+  };
+
+  let lbToCompute = false;
+  if (hasLB && hasScalableCompute) {
+    outer: for (const [sourceId, children] of graph.adjacency) {
+      if (nodeMap.get(sourceId)?.data.componentId !== "load-balancer") continue;
+      for (const childId of children) {
+        const target = nodeMap.get(childId);
+        if (!target) continue;
+        if (target.data.category === "compute") {
+          lbToCompute = true;
+          break outer;
+        }
+        if (
+          (target.data.componentId === "api-gateway" ||
+            target.data.componentId === "rate-limiter") &&
+          reachesCompute(childId)
+        ) {
+          lbToCompute = true;
+          break outer;
+        }
+      }
+    }
+  }
   if (lbToCompute) {
     score += 2;
     passed.push("Load balancer is properly connected to compute layer");

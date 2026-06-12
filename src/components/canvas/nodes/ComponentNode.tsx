@@ -1,12 +1,13 @@
 "use client";
 
 import { memo, useState, useCallback, useRef, useEffect } from "react";
-import { Handle, Position, type NodeProps, type Node, useReactFlow } from "@xyflow/react";
+import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
 import { motion } from "framer-motion";
 import type { ComponentNodeData } from "@/store/canvasStore";
 import { useCanvasStore } from "@/store/canvasStore";
 import { Server } from "lucide-react";
 import { ICON_MAP } from "@/lib/icons";
+import { useIsCoarsePointer } from "@/hooks/useBreakpoint";
 
 type ComponentNode = Node<ComponentNodeData, "component">;
 
@@ -40,6 +41,7 @@ function ComponentNodeInner({ id, data, selected }: NodeProps<ComponentNode>) {
   const [editLabel, setEditLabel] = useState(nodeData.label);
   const inputRef = useRef<HTMLInputElement>(null);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
+  const isCoarse = useIsCoarsePointer();
 
   useEffect(() => {
     if (editing && inputRef.current) {
@@ -63,6 +65,14 @@ function ComponentNodeInner({ id, data, selected }: NodeProps<ComponentNode>) {
     setEditLabel(nodeData.label);
     setEditing(true);
   }, [isCustom, nodeData.label]);
+
+  // Touch devices have no double-click: a tap on the label of an
+  // already-selected custom node enters rename mode.
+  const handleLabelClick = useCallback(() => {
+    if (!isCoarse || !selected || !isCustom || editing) return;
+    setEditLabel(nodeData.label);
+    setEditing(true);
+  }, [isCoarse, selected, isCustom, editing, nodeData.label]);
 
   return (
     <div
@@ -97,12 +107,13 @@ function ComponentNodeInner({ id, data, selected }: NodeProps<ComponentNode>) {
                 setEditing(false);
               }
             }}
-            className="max-w-[80px] bg-transparent text-[11px] font-medium text-zinc-200 outline-none border-b border-cyan-500"
+            className="nodrag max-w-[80px] bg-transparent text-[11px] font-medium text-zinc-200 outline-none border-b border-cyan-500"
           />
         ) : (
           <span
             className={`max-w-[96px] whitespace-normal break-words text-center text-[11px] font-medium leading-tight text-zinc-200 ${isCustom ? "cursor-text" : ""}`}
             onDoubleClick={handleDoubleClick}
+            onClick={handleLabelClick}
           >
             {nodeData.label}
           </span>
@@ -110,7 +121,7 @@ function ComponentNodeInner({ id, data, selected }: NodeProps<ComponentNode>) {
       </div>
 
       {/* Stats */}
-      <span className="font-mono text-[9px] text-zinc-500">
+      <span className="font-mono text-[9px] text-zinc-400">
         {nodeData.maxQPS === Infinity ? '\u221e' : ((nodeData.maxQPS ?? 0)/1000).toFixed(0) + 'k'} qps
       </span>
 
@@ -140,16 +151,16 @@ function ComponentNodeInner({ id, data, selected }: NodeProps<ComponentNode>) {
         </div>
       )}
 
-      {/* Handles */}
+      {/* Handles — larger visual size on touch devices (44px hit area via CSS ::after) */}
       <Handle
         type="target"
         position={Position.Left}
-        className="!h-2 !w-2 !rounded-full !border !border-zinc-600 !bg-zinc-400"
+        className={`${isCoarse ? "!h-5 !w-5" : "!h-2 !w-2"} !rounded-full !border !border-zinc-600 !bg-zinc-400`}
       />
       <Handle
         type="source"
         position={Position.Right}
-        className="!h-2 !w-2 !rounded-full !border !border-zinc-600 !bg-zinc-400"
+        className={`${isCoarse ? "!h-5 !w-5" : "!h-2 !w-2"} !rounded-full !border !border-zinc-600 !bg-zinc-400`}
       />
     </div>
   );

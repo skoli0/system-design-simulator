@@ -183,7 +183,8 @@ export function PenOverlay() {
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={finishStroke}
-      onPointerLeave={finishStroke}
+      // No onPointerLeave: pointer capture keeps the stroke alive when the
+      // pointer briefly exits the svg — ending it there cut strokes short.
       onPointerCancel={finishStroke}
     >
       <g transform={`translate(${vx}, ${vy}) scale(${zoom})`}>

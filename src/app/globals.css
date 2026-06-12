@@ -158,6 +158,27 @@ button, a, [role="button"], input, textarea, select { touch-action: manipulation
 *:focus-visible { outline: 1px solid rgb(6, 182, 212); outline-offset: 2px; }
 .react-flow__node { transition: filter 0.15s ease; }
 .react-flow__handle { transition: all 0.15s ease; }
-.react-flow__handle:hover { transform: scale(1.2); }
+/* Use the standalone `scale` property so React Flow's own translate transform
+   (which centers the handle on the node edge) is preserved — overriding
+   `transform` here makes the handle jump on hover. */
+.react-flow__handle:hover { scale: 1.2; }
+
+/* Keep React Flow Controls clickable above the pen overlay (overlay z-index: 5) */
+.react-flow .react-flow__controls { z-index: 6; }
+
+/* Touch devices: bigger connection handles + a generous invisible hit area */
+@media (pointer: coarse) {
+  .react-flow__handle::after,
+  .react-flow__resize-control.handle::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+    border-radius: 9999px;
+  }
+}
 @keyframes status-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

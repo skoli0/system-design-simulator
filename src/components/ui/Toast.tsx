@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, AlertCircle, Info } from "lucide-react";
 import { useAppStore } from "@/store/appStore";
@@ -24,24 +23,21 @@ const ICON_COLORS = {
 };
 
 export function Toast() {
+  // Auto-dismiss is owned by the store's 4s timer (showToast/clearToast) —
+  // do not schedule a competing timeout here.
   const toast = useAppStore((s) => s.toast);
-  const clearToast = useAppStore((s) => s.clearToast);
-
-  useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(clearToast, 3000);
-    return () => clearTimeout(timer);
-  }, [toast, clearToast]);
 
   return (
     <AnimatePresence>
       {toast && (
         <motion.div
-          initial={{ opacity: 0, y: 20, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 10, scale: 0.95 }}
+          // Horizontal centering lives in the motion values: framer-motion
+          // writes `transform` inline, which would overwrite -translate-x-1/2.
+          initial={{ opacity: 0, y: 20, scale: 0.95, x: "-50%" }}
+          animate={{ opacity: 1, y: 0, scale: 1, x: "-50%" }}
+          exit={{ opacity: 0, y: 10, scale: 0.95, x: "-50%" }}
           transition={{ duration: 0.2 }}
-          className="pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2"
+          className="pointer-events-none fixed bottom-6 left-1/2 z-50"
         >
           <div
             className={`pointer-events-auto flex items-center gap-2 rounded-md border px-4 py-2.5 shadow-sm ${COLORS[toast.type]}`}

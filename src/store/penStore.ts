@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
+import { safeLocalStorage } from "./safeStorage";
 
 export type PenMode = "off" | "pen" | "eraser";
 
@@ -62,6 +63,11 @@ export const usePenStore = create<PenState>()(
     }),
     {
       name: "systemsim-pen-strokes",
+      version: 1,
+      skipHydration: true,
+      storage: createJSONStorage(() => safeLocalStorage),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      migrate: (state) => state as any,
       partialize: (state) => ({
         strokes: state.strokes,
         color: state.color,

@@ -17,7 +17,7 @@ import { edgeTypes } from "./edges/edgeTypes";
 import { useCanvasStore, type ComponentNodeData } from "@/store/canvasStore";
 import { usePenStore } from "@/store/penStore";
 import { getComponentById } from "@/data/components";
-import { BookOpen, GraduationCap, Layers, MousePointer2, Sparkles } from "lucide-react";
+import { BookOpen, GraduationCap, Layers, Lock, MousePointer2, Sparkles } from "lucide-react";
 import { CanvasTabBar } from "./CanvasTabBar";
 import { PenOverlay } from "./PenOverlay";
 import { PenToolbar } from "./PenToolbar";
@@ -30,7 +30,7 @@ interface DesignCanvasProps {
 
 export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview }: DesignCanvasProps = {}) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView } = useReactFlow();
 
   const nodes = useCanvasStore((s) => s.nodes);
   const edges = useCanvasStore((s) => s.edges);
@@ -41,8 +41,25 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const setSelectedNode = useCanvasStore((s) => s.setSelectedNode);
   const setSelectedEdge = useCanvasStore((s) => s.setSelectedEdge);
+  const tabs = useCanvasStore((s) => s.tabs);
+  const activeTabId = useCanvasStore((s) => s.activeTabId);
+  const isReadOnly = tabs.find((t) => t.id === activeTabId)?.readOnly === true;
   const penMode = usePenStore((s) => s.mode);
   const penActive = penMode !== "off";
+
+  // Re-fit the viewport whenever the user switches canvas tabs
+  const initialTabRef = useRef(true);
+  useEffect(() => {
+    if (initialTabRef.current) {
+      initialTabRef.current = false;
+      return; // initial mount already handled by the `fitView` prop
+    }
+    // Wait one frame so the new tab's nodes are mounted before fitting
+    const raf = requestAnimationFrame(() => {
+      fitView({ padding: 0.2, duration: 300 });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [activeTabId, fitView]);
 
   // Listen for text node edits and persist them to the store
   useEffect(() => {
@@ -62,6 +79,7 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
   const onDrop = useCallback(
     (event: DragEvent) => {
       event.preventDefault();
+      if (isReadOnly) return;
 
       const componentId = event.dataTransfer.getData(
         "application/systemsim-component"
@@ -94,7 +112,7 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
 
       addNode(newNode);
     },
-    [screenToFlowPosition, addNode]
+    [screenToFlowPosition, addNode, isReadOnly]
   );
 
   const onNodeClick = useCallback(
@@ -140,7 +158,7 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
+        onConnect={isReadOnly ? undefined : onConnect}
         onDrop={onDrop}
         onDragOver={onDragOver}
         onNodeClick={onNodeClick}
@@ -154,9 +172,11 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
         panOnDrag={!penActive}
         zoomOnScroll={!penActive}
         zoomOnPinch={!penActive}
-        nodesDraggable={!penActive}
-        nodesConnectable={!penActive}
+        nodesDraggable={!penActive && !isReadOnly}
+        nodesConnectable={!penActive && !isReadOnly}
         elementsSelectable={!penActive}
+        connectionRadius={30}
+        deleteKeyCode={null}
       >
         <Background
           variant={BackgroundVariant.Dots}
@@ -180,6 +200,14 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
 
         <PenOverlay />
         <PenToolbar />
+
+        {/* Read-only hint for reference tabs */}
+        {isReadOnly && (
+          <div className="pointer-events-none absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-cyan-500/30 bg-zinc-900/90 px-3 py-1 text-[11px] font-medium text-cyan-400 shadow-sm backdrop-blur">
+            <Lock className="h-3 w-3" />
+            Read-only reference
+          </div>
+        )}
       </div>
 
       {/* Welcome / empty state */}

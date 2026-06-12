@@ -158,7 +158,8 @@ export function TradeoffLog() {
               </p>
               <button
                 onClick={() => removeEntry(entry.id)}
-                className="shrink-0 rounded p-0.5 text-zinc-500 opacity-0 transition-opacity hover:text-rose-400 group-hover:opacity-100"
+                aria-label={`Delete trade-off: ${entry.decision}`}
+                className="shrink-0 rounded p-0.5 text-zinc-500 opacity-60 transition-opacity hover:text-rose-400 group-focus-within:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
               >
                 <Trash2 className="h-3 w-3" />
               </button>

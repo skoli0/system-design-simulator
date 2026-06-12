@@ -21,3 +21,21 @@ export function useIsMobile(): boolean {
 
   return isMobile;
 }
+
+/**
+ * Returns `true` when the primary pointer is coarse (touch — phones, tablets).
+ * SSR-safe: returns `false` on the server; updates after mount.
+ */
+export function useIsCoarsePointer(): boolean {
+  const [isCoarse, setIsCoarse] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(pointer: coarse)");
+    const update = () => setIsCoarse(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  return isCoarse;
+}

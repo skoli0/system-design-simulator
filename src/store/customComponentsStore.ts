@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
+import { safeLocalStorage } from "./safeStorage";
 import type { SystemComponent, ComponentCategory } from "@/types/component";
 
 export interface CustomComponent extends SystemComponent {
@@ -64,7 +65,14 @@ export const useCustomComponentsStore = create<CustomComponentsState>()(
 
       getComponent: (id) => get().components.find((c) => c.id === id),
     }),
-    { name: "systemsim-custom-components" },
+    {
+      name: "systemsim-custom-components",
+      version: 1,
+      skipHydration: true,
+      storage: createJSONStorage(() => safeLocalStorage),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      migrate: (state) => state as any,
+    },
   ),
 );
 

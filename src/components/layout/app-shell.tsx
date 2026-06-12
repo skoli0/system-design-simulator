@@ -14,8 +14,7 @@ import { useSimulationStore } from "@/store/simulationStore";
 import { runSimulation } from "@/engine/simulator";
 import { scoreDesign } from "@/scoring/scorer";
 import { PROBLEMS } from "@/data/problems";
-import { getComponentById } from "@/data/components";
-import type { Edge } from "@xyflow/react";
+import { loadReferenceIntoTab } from "@/lib/loadReference";
 import { Toast } from "@/components/ui/Toast";
 import { SaveDialog } from "@/components/dialogs/SaveDialog";
 import { LoadDialog } from "@/components/dialogs/LoadDialog";
@@ -50,6 +49,9 @@ export function AppShell() {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     if (params.get("support") === "1") {
+      // Reading the URL (external system) once on mount — a lazy initializer
+      // would cause an SSR hydration mismatch, so the effect is intentional.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSupportDialogOpen(true);
       params.delete("support");
       const q = params.toString();
@@ -72,12 +74,22 @@ export function AppShell() {
   }, [isMobile, toggleRightPanel]);
 
   // Close any open mobile drawers when we transition to desktop
+  // (render-time adjustment — https://react.dev/learn/you-might-not-need-an-effect)
+  if (!isMobile && (mobileSidebarOpen || mobileRightOpen)) {
+    setMobileSidebarOpen(false);
+    setMobileRightOpen(false);
+  }
+
+  // On tablets (768–1023px) default the right panel to closed on first load
+  // so the canvas gets the space. Runs once; the user can still toggle it.
   useEffect(() => {
-    if (!isMobile) {
-      setMobileSidebarOpen(false);
-      setMobileRightOpen(false);
+    if (
+      window.matchMedia("(min-width: 768px) and (max-width: 1023px)").matches &&
+      useAppStore.getState().rightPanelOpen
+    ) {
+      useAppStore.getState().toggleRightPanel();
     }
-  }, [isMobile]);
+  }, []);
 
   const handleSave = useCallback(() => setSaveDialogOpen(true), []);
   const handleLoad = useCallback(() => setLoadDialogOpen(true), []);
@@ -152,60 +164,7 @@ export function AppShell() {
       handlePickProblem();
       return;
     }
-
-    const nodeIdMap = new Map<string, string>();
-    const refNodes: Node<ComponentNodeData>[] = [];
-
-    problem.referenceSolution.nodes.forEach((ref, index) => {
-      const comp = getComponentById(ref.componentId);
-      if (!comp) return;
-      const nodeId = `${comp.id}-ref-${index}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      nodeIdMap.set(`${ref.componentId}-${index}`, nodeId);
-      refNodes.push({
-        id: nodeId,
-        type: "component",
-        position: { x: ref.x, y: ref.y },
-        data: {
-          componentId: comp.id,
-          label: comp.label,
-          icon: comp.icon,
-          category: comp.category,
-          replicas: 1,
-          maxQPS: comp.maxQPS,
-          latencyMs: comp.latencyMs,
-          scalable: comp.scalable,
-        },
-      });
-    });
-
-    const refEdges: Edge[] = [];
-    for (const ref of problem.referenceSolution.edges) {
-      const findIdByComponent = (cid: string) => {
-        for (const [key, value] of nodeIdMap) {
-          if (key.startsWith(`${cid}-`)) return value;
-        }
-        return undefined;
-      };
-      const sourceId = findIdByComponent(ref.source);
-      const targetId = findIdByComponent(ref.target);
-      if (sourceId && targetId) {
-        refEdges.push({
-          id: `e-${sourceId}-${targetId}`,
-          source: sourceId,
-          target: targetId,
-          type: "animated",
-        });
-      }
-    }
-
-    useCanvasStore.getState().addTab({
-      id: `ref-${problem.id}`,
-      label: `${problem.title} (Reference)`,
-      nodes: refNodes,
-      edges: refEdges,
-      readOnly: true,
-    });
-    useAppStore.getState().showToast("Reference opened in new tab", "success");
+    loadReferenceIntoTab(problem);
   }, [handlePickProblem]);
 
   // Keyboard shortcuts
@@ -216,11 +175,20 @@ export function AppShell() {
         return;
       }
 
+      // e.key is "S" (uppercase) when Shift is held — normalize for shortcuts
+      const key = e.key.toLowerCase();
+
       if (e.key === "Delete" || e.key === "Backspace") {
-        const { selectedNodeId, deleteNode } = useCanvasStore.getState();
+        const { selectedNodeId, selectedEdgeId, deleteNode, deleteEdge, tabs, activeTabId } =
+          useCanvasStore.getState();
+        const isReadOnlyTab = tabs.find((t) => t.id === activeTabId)?.readOnly === true;
+        if (isReadOnlyTab) return;
         if (selectedNodeId) {
           e.preventDefault();
           deleteNode(selectedNodeId);
+        } else if (selectedEdgeId) {
+          e.preventDefault();
+          deleteEdge(selectedEdgeId);
         }
       }
 
@@ -229,17 +197,17 @@ export function AppShell() {
         handleSimulate();
       }
 
-      if (e.key === "s" && (e.metaKey || e.ctrlKey) && e.shiftKey) {
+      if (key === "s" && (e.metaKey || e.ctrlKey) && e.shiftKey) {
         e.preventDefault();
         handleScore();
       }
 
-      if (e.key === "s" && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
+      if (key === "s" && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
         e.preventDefault();
         setSaveDialogOpen(true);
       }
 
-      if (e.key === "o" && (e.metaKey || e.ctrlKey)) {
+      if (key === "o" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setLoadDialogOpen(true);
       }
@@ -247,7 +215,11 @@ export function AppShell() {
       if (e.key === "Escape") {
         if (mobileSidebarOpen) setMobileSidebarOpen(false);
         else if (mobileRightOpen) setMobileRightOpen(false);
-        else useCanvasStore.getState().setSelectedNode(null);
+        else {
+          // Clears both node and edge selection
+          useCanvasStore.getState().setSelectedNode(null);
+          useCanvasStore.getState().setSelectedEdge(null);
+        }
       }
     }
 
@@ -336,6 +308,7 @@ export function AppShell() {
                       setCreateComponentDialogOpen(true);
                       setMobileSidebarOpen(false);
                     }}
+                    onComponentAdded={() => setMobileSidebarOpen(false)}
                     variant="mobile"
                   />
                 </div>
@@ -349,7 +322,7 @@ export function AppShell() {
                 onClick={() => setMobileRightOpen(false)}
               />
               <div
-                className={`absolute inset-x-0 bottom-0 z-40 flex max-h-[85%] flex-col rounded-t-2xl border-t border-zinc-800 bg-zinc-900 shadow-2xl transition-transform md:hidden ${
+                className={`absolute inset-x-0 bottom-0 z-40 flex h-[70dvh] max-h-[85dvh] flex-col rounded-t-2xl border-t border-zinc-800 bg-zinc-900 shadow-2xl transition-transform md:hidden ${
                   mobileRightOpen ? "translate-y-0" : "translate-y-full"
                 }`}
                 aria-hidden={!mobileRightOpen}
@@ -376,7 +349,10 @@ export function AppShell() {
           )}
         </div>
 
-        <SupportFAB onClick={() => setSupportDialogOpen(true)} />
+        <SupportFAB
+          onClick={() => setSupportDialogOpen(true)}
+          hidden={mobileSidebarOpen || mobileRightOpen}
+        />
 
         <Toast />
 

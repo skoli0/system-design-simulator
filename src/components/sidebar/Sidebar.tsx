@@ -10,15 +10,19 @@ interface SidebarProps {
   open?: boolean;
   onCreateProblem?: () => void;
   onCreateCustomComponent?: () => void;
+  /** Called after a component is added from the palette (closes the mobile drawer). */
+  onComponentAdded?: () => void;
   variant?: "desktop" | "mobile";
 }
 
 function SidebarTabs({
   onCreateProblem,
   onCreateCustomComponent,
+  onComponentAdded,
 }: {
   onCreateProblem?: () => void;
   onCreateCustomComponent?: () => void;
+  onComponentAdded?: () => void;
 }) {
   const activeLeftTab = useAppStore((s) => s.activeLeftTab);
   const setActiveLeftTab = useAppStore((s) => s.setActiveLeftTab);
@@ -46,7 +50,10 @@ function SidebarTabs({
       </TabsList>
 
       <TabsContent value="components" className="mt-0 flex-1 min-h-0 overflow-hidden">
-        <ComponentPalette onCreateCustomComponent={onCreateCustomComponent} />
+        <ComponentPalette
+          onCreateCustomComponent={onCreateCustomComponent}
+          onComponentAdded={onComponentAdded}
+        />
       </TabsContent>
 
       <TabsContent value="problems" className="mt-0 flex-1 min-h-0 overflow-hidden">
@@ -64,6 +71,7 @@ export function Sidebar({
   open = true,
   onCreateProblem,
   onCreateCustomComponent,
+  onComponentAdded,
   variant = "desktop",
 }: SidebarProps) {
   if (variant === "mobile") {
@@ -72,6 +80,7 @@ export function Sidebar({
         <SidebarTabs
           onCreateProblem={onCreateProblem}
           onCreateCustomComponent={onCreateCustomComponent}
+          onComponentAdded={onComponentAdded}
         />
       </div>
     );

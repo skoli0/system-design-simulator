@@ -19,6 +19,7 @@ import { ICON_MAP } from "@/lib/icons";
 import { useCanvasStore, type ComponentNodeData } from "@/store/canvasStore";
 import { useAppStore } from "@/store/appStore";
 import { useCustomComponentsStore } from "@/store/customComponentsStore";
+import { useIsCoarsePointer } from "@/hooks/useBreakpoint";
 import type { SystemComponent } from "@/types/component";
 
 const CATEGORY_ACCENT: Record<string, string> = {
@@ -47,14 +48,17 @@ const CATEGORY_BORDER: Record<string, string> = {
 
 interface ComponentPaletteProps {
   onCreateCustomComponent?: () => void;
+  /** Called after a component is added via tap/quick-add (e.g. to close a mobile drawer). */
+  onComponentAdded?: () => void;
 }
 
-export function ComponentPalette({ onCreateCustomComponent }: ComponentPaletteProps = {}) {
+export function ComponentPalette({ onCreateCustomComponent, onComponentAdded }: ComponentPaletteProps = {}) {
   const [search, setSearch] = useState("");
-  const { getViewport } = useReactFlow();
+  const { screenToFlowPosition } = useReactFlow();
   const addNode = useCanvasStore((s) => s.addNode);
   const customComponents = useCustomComponentsStore((s) => s.components);
   const deleteCustomComponent = useCustomComponentsStore((s) => s.deleteComponent);
+  const isCoarse = useIsCoarsePointer();
 
   const allComponents: SystemComponent[] = [...customComponents, ...SYSTEM_COMPONENTS];
   const customIds = new Set(customComponents.map((c) => c.id));
@@ -72,22 +76,26 @@ export function ComponentPalette({ onCreateCustomComponent }: ComponentPalettePr
     setTimeout(() => document.body.removeChild(ghost), 0);
   }
 
-  /** Tap-to-add: place the component at the canvas viewport center. */
+  /** Tap-to-add: place the component at the visible canvas center. */
   const handleQuickAdd = useCallback(
     (componentId: string) => {
       const component = getComponentById(componentId);
       if (!component) return;
 
-      const { x, y, zoom } = getViewport();
+      // Center of the canvas wrapper itself (window center is offset by sidebars)
+      const wrapper = document.querySelector(".react-flow");
+      const rect = wrapper?.getBoundingClientRect();
+      const center = screenToFlowPosition({
+        x: rect ? rect.left + rect.width / 2 : window.innerWidth / 2,
+        y: rect ? rect.top + rect.height / 2 : window.innerHeight / 2,
+      });
       // Jitter the center so repeated taps don't stack exactly on top
       const jitter = () => (Math.random() - 0.5) * 60;
-      const centerX = (-x + window.innerWidth / 2) / zoom + jitter();
-      const centerY = (-y + window.innerHeight / 2) / zoom + jitter();
 
       const newNode: Node<ComponentNodeData> = {
         id: `${componentId}-${crypto.randomUUID()}`,
         type: "component",
-        position: { x: centerX, y: centerY },
+        position: { x: center.x + jitter(), y: center.y + jitter() },
         data: {
           componentId: component.id,
           label: component.label,
@@ -101,8 +109,9 @@ export function ComponentPalette({ onCreateCustomComponent }: ComponentPalettePr
       };
       addNode(newNode);
       useAppStore.getState().showToast(`Added ${component.label}`, "success");
+      onComponentAdded?.();
     },
-    [getViewport, addNode]
+    [screenToFlowPosition, addNode, onComponentAdded]
   );
 
   const query = search.toLowerCase().trim();
@@ -138,7 +147,7 @@ export function ComponentPalette({ onCreateCustomComponent }: ComponentPalettePr
           />
         </div>
         {query && (
-          <p className="mt-1.5 text-[10px] text-zinc-500">
+          <p className="mt-1.5 text-[10px] text-zinc-400">
             {totalMatches === 0
               ? "No matches"
               : `${totalMatches} component${totalMatches === 1 ? "" : "s"} match "${search}"`}
@@ -190,6 +199,8 @@ export function ComponentPalette({ onCreateCustomComponent }: ComponentPalettePr
                           <div
                             draggable
                             onDragStart={(e) => handleDragStart(e, item.id)}
+                            // Touch devices can't drag-and-drop: tapping the row adds the component
+                            onClick={isCoarse ? () => handleQuickAdd(item.id) : undefined}
                             className={`group flex cursor-grab items-center gap-2 rounded-md border-l-2 px-2 py-2 text-xs text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200 active:cursor-grabbing ${borderColor}`}
                           >
                             <GripVertical className="h-3 w-3 shrink-0 text-zinc-600 opacity-0 transition-opacity group-hover:opacity-100" />
@@ -210,20 +221,20 @@ export function ComponentPalette({ onCreateCustomComponent }: ComponentPalettePr
                                 e.stopPropagation();
                                 handleQuickAdd(item.id);
                               }}
-                              className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-500 opacity-60 transition-all hover:bg-zinc-700 hover:text-cyan-400 hover:opacity-100 md:opacity-0 md:group-hover:opacity-100"
+                              className={`flex ${isCoarse ? "h-9 w-9" : "h-5 w-5"} shrink-0 items-center justify-center rounded text-zinc-500 opacity-60 transition-all hover:bg-zinc-700 hover:text-cyan-400 hover:opacity-100 group-focus-within:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100`}
                               title="Add to canvas"
                               aria-label={`Add ${item.label} to canvas`}
                             >
-                              <Plus className="h-3 w-3" />
+                              <Plus className={isCoarse ? "h-4 w-4" : "h-3 w-3"} />
                             </button>
                             {isCustom && (
                               <button
                                 onClick={(e) => handleDeleteCustom(e, item.id, item.label)}
-                                className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-500 opacity-60 transition-all hover:bg-zinc-700 hover:text-rose-400 hover:opacity-100 md:opacity-0 md:group-hover:opacity-100"
+                                className={`flex ${isCoarse ? "h-9 w-9" : "h-5 w-5"} shrink-0 items-center justify-center rounded text-zinc-500 opacity-60 transition-all hover:bg-zinc-700 hover:text-rose-400 hover:opacity-100 group-focus-within:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100`}
                                 title="Delete custom component"
                                 aria-label={`Delete ${item.label}`}
                               >
-                                <Trash2 className="h-3 w-3" />
+                                <Trash2 className={isCoarse ? "h-4 w-4" : "h-3 w-3"} />
                               </button>
                             )}
                           </div>

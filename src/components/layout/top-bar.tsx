@@ -28,10 +28,10 @@ import { useCanvasStore } from "@/store/canvasStore";
 import { usePenStore } from "@/store/penStore";
 import { PROBLEMS } from "@/data/problems";
 import { useCustomProblemsStore } from "@/store/customProblemsStore";
-import { type Node, type Edge, useReactFlow } from "@xyflow/react";
-import { getComponentById } from "@/data/components";
-import type { ComponentNodeData } from "@/store/canvasStore";
+import { type Node, useReactFlow } from "@xyflow/react";
+import { loadReferenceIntoTab } from "@/lib/loadReference";
 import { exportAsPng, exportAsSvg, exportAsJSON } from "@/lib/exportCanvas";
+import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 
 interface TopBarProps {
   onSimulate: () => void;
@@ -50,7 +50,8 @@ export function TopBar({ onSimulate, onScore, onClearCanvas, onSave, onLoad, onS
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
-  const { getViewport } = useReactFlow();
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  const { screenToFlowPosition } = useReactFlow();
   const addNode = useCanvasStore((s) => s.addNode);
 
   const selectedProblemId = useAppStore((s) => s.selectedProblemId);
@@ -62,19 +63,23 @@ export function TopBar({ onSimulate, onScore, onClearCanvas, onSave, onLoad, onS
     customProblems.find((p) => p.id === selectedProblemId);
 
   const addTextNote = useCallback(() => {
-    const { x, y, zoom } = getViewport();
-    const centerX = (-x + window.innerWidth / 2) / zoom;
-    const centerY = (-y + window.innerHeight / 2) / zoom;
+    // Center of the visible canvas (not the window — sidebars offset it)
+    const wrapper = document.querySelector(".react-flow");
+    const rect = wrapper?.getBoundingClientRect();
+    const position = screenToFlowPosition({
+      x: rect ? rect.left + rect.width / 2 : window.innerWidth / 2,
+      y: rect ? rect.top + rect.height / 2 : window.innerHeight / 2,
+    });
 
     const newNode: Node = {
       id: `text-${crypto.randomUUID()}`,
       type: "text",
-      position: { x: centerX, y: centerY },
+      position,
       data: { text: "" },
       connectable: false,
     };
     addNode(newNode);
-  }, [getViewport, addNode]);
+  }, [screenToFlowPosition, addNode]);
 
   const handleExportPng = useCallback(async () => {
     setExportOpen(false);
@@ -128,62 +133,12 @@ export function TopBar({ onSimulate, onScore, onClearCanvas, onSave, onLoad, onS
   const loadReference = useCallback(() => {
     const problem = PROBLEMS.find((p) => p.id === selectedProblemId);
     if (!problem) return;
-
-    // Build reference nodes
-    const nodeIdMap = new Map<string, string>();
-    const refNodes: Node<ComponentNodeData>[] = [];
-
-    problem.referenceSolution.nodes.forEach((ref, index) => {
-      const comp = getComponentById(ref.componentId);
-      if (!comp) return;
-
-      const nodeId = `${comp.id}-ref-${index}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      nodeIdMap.set(`${ref.componentId}-${index}`, nodeId);
-
-      refNodes.push({
-        id: nodeId,
-        type: "component",
-        position: { x: ref.x, y: ref.y },
-        data: {
-          componentId: comp.id,
-          label: comp.label,
-          icon: comp.icon,
-          category: comp.category,
-          replicas: 1,
-          maxQPS: comp.maxQPS,
-          latencyMs: comp.latencyMs,
-          scalable: comp.scalable,
-        },
-      });
-    });
-
-    const refEdges: Edge[] = [];
-    for (const ref of problem.referenceSolution.edges) {
-      const sourceId = findNodeIdByComponent(nodeIdMap, ref.source);
-      const targetId = findNodeIdByComponent(nodeIdMap, ref.target);
-      if (sourceId && targetId) {
-        refEdges.push({
-          id: `e-${sourceId}-${targetId}`,
-          source: sourceId,
-          target: targetId,
-          type: "animated",
-        });
-      }
-    }
-
-    // Open reference in a NEW tab — user's design stays in "My Design" tab
-    useCanvasStore.getState().addTab({
-      id: `ref-${problem.id}`,
-      label: `${problem.title} (Reference)`,
-      nodes: refNodes,
-      edges: refEdges,
-      readOnly: true,
-    });
-
-    useAppStore.getState().showToast("Reference opened in new tab — your design is safe", "success");
+    // Opens the reference in a NEW read-only tab — user's design stays safe
+    loadReferenceIntoTab(problem);
   }, [selectedProblemId]);
 
   return (
+    <>
     <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-zinc-800 bg-zinc-900 px-2 md:gap-3 md:px-3">
       {/* Left section */}
       <div className="flex min-w-0 items-center gap-2 md:gap-3">
@@ -191,6 +146,7 @@ export function TopBar({ onSimulate, onScore, onClearCanvas, onSave, onLoad, onS
           onClick={onToggleLeft}
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
           title="Toggle sidebar"
+          aria-label="Toggle sidebar"
         >
           <PanelLeft className="h-4 w-4" />
         </button>
@@ -286,7 +242,7 @@ export function TopBar({ onSimulate, onScore, onClearCanvas, onSave, onLoad, onS
         {!selectedProblemId.startsWith("custom-") && (
           <button
             onClick={loadReference}
-            className="hidden shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[10px] text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300 md:flex"
+            className="hidden shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[10px] text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-300 md:flex"
             title="Load reference solution"
           >
             <Download className="h-3 w-3" />
@@ -413,7 +369,7 @@ export function TopBar({ onSimulate, onScore, onClearCanvas, onSave, onLoad, onS
 
                 {/* Danger */}
                 <button
-                  onClick={() => { setMobileMoreOpen(false); onClearCanvas(); }}
+                  onClick={() => { setMobileMoreOpen(false); setClearConfirmOpen(true); }}
                   className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-xs text-rose-400 transition-colors hover:bg-zinc-800"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -497,9 +453,10 @@ export function TopBar({ onSimulate, onScore, onClearCanvas, onSave, onLoad, onS
         <div className="hidden h-4 w-px bg-zinc-800 md:block" />
 
         <button
-          onClick={onClearCanvas}
+          onClick={() => setClearConfirmOpen(true)}
           className="hidden h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-rose-400 md:flex"
           title="Clear canvas"
+          aria-label="Clear canvas"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
@@ -510,7 +467,7 @@ export function TopBar({ onSimulate, onScore, onClearCanvas, onSave, onLoad, onS
           className="h-7 gap-1.5 bg-cyan-500 px-3 text-xs font-medium text-white hover:bg-cyan-400"
         >
           <Play className="h-3 w-3" />
-          Simulate
+          <span className="hidden sm:inline">Simulate</span>
         </Button>
         <Button
           size="sm"
@@ -536,18 +493,22 @@ export function TopBar({ onSimulate, onScore, onClearCanvas, onSave, onLoad, onS
           onClick={onToggleRight}
           className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
           title="Toggle panel"
+          aria-label="Toggle properties panel"
         >
           <PanelRight className="h-4 w-4" />
         </button>
       </div>
     </header>
-  );
-}
 
-/** Find the first node ID in the map whose key starts with the given componentId. */
-function findNodeIdByComponent(nodeIdMap: Map<string, string>, componentId: string): string | undefined {
-  for (const [key, value] of nodeIdMap) {
-    if (key.startsWith(`${componentId}-`)) return value;
-  }
-  return undefined;
+    <ConfirmDialog
+      open={clearConfirmOpen}
+      title="Clear canvas?"
+      message="All components and connections on the current tab will be removed. This can't be undone."
+      confirmText="Clear canvas"
+      danger
+      onConfirm={onClearCanvas}
+      onClose={() => setClearConfirmOpen(false)}
+    />
+    </>
+  );
 }

@@ -49,7 +49,7 @@ export const SYSTEM_COMPONENTS: SystemComponent[] = [
     scalable: true,
     stateful: false,
     description:
-      "Single entry point for all API requests — handles routing, authentication, rate limiting, request transformation, and protocol translation. Use it when you have multiple microservices behind a unified API surface. AWS API Gateway, Kong, and Google Cloud Apigee are popular managed options.",
+      "Single entry point for all API requests — handles routing, authentication, rate limiting, request transformation, and protocol translation. Use it when you have multiple microservices behind a unified API surface. AWS API Gateway, Kong, and Google Cloud Apigee are popular managed options. Note that managed offerings enforce account-level quotas — AWS API Gateway defaults to 10,000 RPS per account — so the 50K QPS figure here reflects a self-hosted or scaled-out gateway tier.",
   },
   {
     id: "rate-limiter",
@@ -61,7 +61,7 @@ export const SYSTEM_COMPONENTS: SystemComponent[] = [
     scalable: true,
     stateful: true,
     description:
-      "Throttles requests per client, IP, or API key to protect downstream services from abuse, DDoS attacks, and traffic spikes. Typically implemented using token bucket or sliding window algorithms backed by Redis. Often built into API gateways like Kong or AWS WAF, or implemented as a standalone service.",
+      "Throttles requests per client, IP, or API key to protect downstream services from abuse, DDoS attacks, and traffic spikes. Typically implemented using token bucket or sliding window algorithms backed by Redis. Often built into API gateways like Kong, enforced at the edge via AWS WAF, or implemented as a standalone service.",
   },
   // Compute
   {
@@ -198,7 +198,7 @@ export const SYSTEM_COMPONENTS: SystemComponent[] = [
     scalable: true,
     stateful: true,
     description:
-      "Maintains persistent bidirectional connections for real-time communication. Essential for chat apps, live notifications, collaborative editing, and gaming. Services like Socket.io, AWS API Gateway WebSocket, and Pusher handle millions of concurrent connections with connection-to-server mapping stored in Redis.",
+      "Maintains persistent bidirectional connections for real-time communication. Essential for chat apps, live notifications, collaborative editing, and gaming. Libraries like Socket.io and managed services like AWS API Gateway WebSocket APIs or Pusher handle millions of concurrent connections, with connection-to-server mapping stored in Redis.",
   },
   {
     id: "task-scheduler",
@@ -266,7 +266,7 @@ export const SYSTEM_COMPONENTS: SystemComponent[] = [
     label: "Data Warehouse",
     category: "storage",
     icon: "Warehouse",
-    maxQPS: 1000,
+    maxQPS: 50,
     latencyMs: 5000,
     scalable: true,
     stateful: true,

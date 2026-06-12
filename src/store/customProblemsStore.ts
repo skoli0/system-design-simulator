@@ -1,5 +1,18 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
+import { safeLocalStorage } from "./safeStorage";
+
+/** crypto.randomUUID is unavailable on non-secure (http) origins. */
+function randomId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    try {
+      return crypto.randomUUID();
+    } catch {
+      // fall through to the non-crypto fallback
+    }
+  }
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
 
 export interface CustomProblem {
   id: string;
@@ -31,7 +44,7 @@ export const useCustomProblemsStore = create<CustomProblemsState>()(
       problems: [],
 
       addProblem: (problem) => {
-        const id = `custom-${crypto.randomUUID()}`;
+        const id = `custom-${randomId()}`;
         const newProblem: CustomProblem = {
           ...problem,
           id,
@@ -57,6 +70,11 @@ export const useCustomProblemsStore = create<CustomProblemsState>()(
     }),
     {
       name: "systemsim-custom-problems",
+      version: 1,
+      skipHydration: true,
+      storage: createJSONStorage(() => safeLocalStorage),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      migrate: (state) => state as any,
     }
   )
 );

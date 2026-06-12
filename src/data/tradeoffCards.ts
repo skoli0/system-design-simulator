@@ -448,36 +448,267 @@ export const TRADEOFF_CARDS: TradeoffCard[] = [
   },
   {
     id: "at-least-once-vs-exactly-once",
-    title: "Message Queue: At-least-once vs Exactly-once",
+    title: "Exactly-once Processing (EOS)",
     optionA: {
-      name: "At-least-once Delivery",
+      name: "At-least-once Delivery + Idempotent Consumers",
       pros: [
-        "Simpler to implement",
+        "Honest about network reality — retries on uncertainty",
         "No message loss",
-        "Higher throughput",
-        "Most brokers support natively",
+        "High throughput, low coordination overhead",
+        "Works on any broker",
       ],
       cons: [
-        "Duplicate messages possible",
-        "Consumer must be idempotent",
-        "Application-level deduplication needed",
+        "Duplicate deliveries are guaranteed to happen eventually",
+        "Every consumer must dedupe or be idempotent",
+        "Dedup state (keys, TTLs) is your problem",
       ],
     },
     optionB: {
-      name: "Exactly-once Delivery",
+      name: "Exactly-once Processing (Kafka-style EOS)",
       pros: [
-        "No duplicates",
-        "Simplifies consumer logic",
-        "Correct by default",
+        "Idempotent producers — broker dedupes retries via sequence numbers",
+        "Transactions make consume-transform-produce atomic across partitions",
+        "Effectively-once results without app-level dedup inside the pipeline",
       ],
       cons: [
-        "Significant performance overhead",
-        "Requires transactional coordination",
-        "Limited broker support (Kafka transactions)",
-        "Higher latency",
+        "It is NOT exactly-once delivery — that is impossible over an unreliable network (Two Generals problem)",
+        "Underneath it is still at-least-once delivery plus deduplication",
+        "Guarantee ends at the pipeline edge — external side effects (emails, API calls) still need idempotency or transactional offsets",
+        "Transaction coordination adds latency and complexity",
       ],
     },
-    whenToChooseA: "For most use cases — design idempotent consumers instead (notifications, analytics events, log processing).",
-    whenToChooseB: "For financial transactions or state changes where duplicates cause real harm and you can afford the performance cost.",
+    whenToChooseA: "For most messaging — accept duplicates and design idempotent consumers (notifications, analytics events, log processing).",
+    whenToChooseB: "For stream pipelines where duplicated results corrupt state (payments ledgers, counters, Kafka Streams apps) — knowing it dedupes processing, not delivery.",
+  },
+  {
+    id: "optimistic-vs-pessimistic-locking",
+    title: "Optimistic vs Pessimistic Locking",
+    optionA: {
+      name: "Optimistic Locking (Version Check at Write)",
+      pros: [
+        "No locks held — readers never block",
+        "Great throughput under low contention",
+        "No deadlocks or lock management",
+        "Maps naturally to compare-and-swap / row versioning",
+      ],
+      cons: [
+        "Conflicts detected only at write time",
+        "Failed writes must retry — wasted work",
+        "Retry storms under high contention",
+      ],
+    },
+    optionB: {
+      name: "Pessimistic Locking (Lock Before Read)",
+      pros: [
+        "Conflicts prevented up front — no retries",
+        "Predictable behavior under heavy contention",
+        "Simple application logic (no retry loops)",
+      ],
+      cons: [
+        "Locks block other transactions — lower concurrency",
+        "Deadlock risk requires detection/timeouts",
+        "Lock held too long stalls everyone (e.g., SELECT FOR UPDATE across a slow operation)",
+      ],
+    },
+    whenToChooseA: "When conflicts are rare and throughput matters — version columns or CAS on user profiles, documents, low-contention rows.",
+    whenToChooseB: "When many writers fight over the same rows and retries would storm (ticket/seat booking, inventory decrement on a hot SKU).",
+  },
+  {
+    id: "sse-vs-websocket",
+    title: "SSE vs WebSocket",
+    optionA: {
+      name: "Server-Sent Events (SSE)",
+      pros: [
+        "Plain HTTP — works with existing proxies, LBs, and HTTP/2 multiplexing",
+        "Built-in auto-reconnect with last-event-ID",
+        "Simple server and client code",
+        "Much cheaper than long-polling (no re-request per message)",
+      ],
+      cons: [
+        "One-way only — server to client",
+        "Text-only (UTF-8) — binary must be encoded",
+        "Client-to-server messages need separate HTTP requests",
+      ],
+    },
+    optionB: {
+      name: "WebSocket",
+      pros: [
+        "Full-duplex — both sides push anytime",
+        "Binary frame support",
+        "Lowest per-message overhead once connected",
+      ],
+      cons: [
+        "Stateful connections — sticky routing or connection registries needed",
+        "Trickier through proxies/LBs (protocol upgrade)",
+        "You own reconnection, heartbeats, and backpressure logic",
+      ],
+    },
+    whenToChooseA: "For one-way streams — notifications, live feeds, progress updates, LLM token streaming. (Long-polling remains the lowest-common-denominator fallback: an HTTP request held open per message — simple, works everywhere, highest overhead.)",
+    whenToChooseB: "For bidirectional, low-latency interaction — chat, multiplayer games, collaborative editing.",
+  },
+  {
+    id: "kafka-vs-rabbitmq",
+    title: "Kafka Log vs RabbitMQ Broker",
+    optionA: {
+      name: "Kafka (Distributed Log)",
+      pros: [
+        "Messages retained and re-readable — consumers track their own offsets",
+        "Replay from any offset for reprocessing or new consumers",
+        "Ordered within a partition",
+        "Massive throughput via sequential disk I/O and batching",
+      ],
+      cons: [
+        "No per-message ack/delete — a slow message blocks its partition",
+        "Routing is just topics + partitions; no broker-side filtering",
+        "Heavier operational footprint (partitions, consumer groups, rebalances)",
+      ],
+    },
+    optionB: {
+      name: "RabbitMQ (Smart Broker Queue)",
+      pros: [
+        "Per-message ack, requeue, and delete semantics",
+        "Flexible routing via exchanges (topic, fanout, headers)",
+        "Priority queues, per-message TTL, dead-letter exchanges built in",
+      ],
+      cons: [
+        "Messages deleted on ack — no replay for new consumers",
+        "Lower throughput than a log at high volume",
+        "Deep queues degrade broker performance",
+      ],
+    },
+    whenToChooseA: "For event streaming, analytics pipelines, event sourcing, or when multiple independent consumers need the same data with replay.",
+    whenToChooseB: "For task/work queues, complex routing rules, or per-message guarantees (job dispatch, RPC-style messaging, retry with dead-lettering).",
+  },
+  {
+    id: "jwt-vs-session-tokens",
+    title: "JWT vs Session Tokens",
+    optionA: {
+      name: "JWT (Stateless)",
+      pros: [
+        "No server-side lookup — claims verified via signature",
+        "Works across services and domains without shared session store",
+        "Scales horizontally with zero session affinity",
+      ],
+      cons: [
+        "Hard to revoke before expiry — token is valid until it expires",
+        "Token carries all claims — size overhead on every request",
+        "Signing key rotation must be handled carefully (key IDs, JWKS)",
+        "Stolen token is usable until expiry",
+      ],
+    },
+    optionB: {
+      name: "Session Tokens (Stateful)",
+      pros: [
+        "Instant revocation — delete the server-side record and the session dies",
+        "Small opaque cookie — no claims exposed to the client",
+        "Easy to inspect and manage active sessions",
+      ],
+      cons: [
+        "Lookup on every request (DB or Redis)",
+        "Session store is shared infrastructure to scale and keep available",
+        "Cross-domain/microservice use needs extra plumbing",
+      ],
+    },
+    whenToChooseA: "For microservices and cross-domain APIs — keep JWTs short-lived and pair with refresh tokens to limit the revocation gap.",
+    whenToChooseB: "For classic web apps needing instant logout, ban, or session management — typically backed by Redis.",
+  },
+  {
+    id: "normalization-vs-denormalization",
+    title: "Normalization vs Denormalization",
+    optionA: {
+      name: "Normalization (Write-Optimized)",
+      pros: [
+        "Single source of truth — no update anomalies",
+        "Writes touch one place",
+        "Smaller storage footprint",
+        "Schema enforces integrity",
+      ],
+      cons: [
+        "Reads pay for joins at query time",
+        "Complex queries get slow as join depth grows",
+        "Poor fit for distributed stores with weak join support",
+      ],
+    },
+    optionB: {
+      name: "Denormalization (Read-Optimized)",
+      pros: [
+        "Joins precomputed — fast, simple reads",
+        "One document/row fetch serves the whole view",
+        "Natural fit for NoSQL aggregates and feeds",
+      ],
+      cons: [
+        "Duplicated data must be kept consistent",
+        "Updates fan out to every copy",
+        "Stale copies if propagation fails",
+      ],
+    },
+    whenToChooseA: "For OLTP relational cores where correctness and write integrity dominate (orders, accounts, inventory).",
+    whenToChooseB: "For read-heavy views (feeds, product pages, NoSQL aggregates) — and note most mature systems do both: a normalized source of truth plus denormalized read models or materialized views (CQRS).",
+  },
+  {
+    id: "batch-vs-stream-processing",
+    title: "Batch vs Stream Processing",
+    optionA: {
+      name: "Batch Processing",
+      pros: [
+        "High throughput over bounded datasets",
+        "Simple mental model — run, finish, inspect output",
+        "Easy reprocessing — just rerun the job",
+        "Mature tooling (MapReduce, Spark)",
+      ],
+      cons: [
+        "Results lag by the schedule interval — often hours",
+        "Bursty resource usage around job runs",
+        "Late-arriving data waits for the next run",
+      ],
+    },
+    optionB: {
+      name: "Stream Processing",
+      pros: [
+        "Low-latency results over unbounded data",
+        "Windowing and watermarks handle event-time vs processing-time skew",
+        "Continuous, steady resource usage (Flink, Kafka Streams)",
+      ],
+      cons: [
+        "Harder operations — state management, backpressure, exactly-once semantics",
+        "Late/out-of-order events need explicit handling",
+        "Reprocessing requires replayable sources and careful state resets",
+      ],
+    },
+    whenToChooseA: "For reports, ML training, billing runs — anywhere hours of latency is fine and reprocessability matters.",
+    whenToChooseB: "For fraud detection, live dashboards, alerting — anywhere seconds matter. (Lambda architecture runs both layers; Kappa simplifies to stream-only with replay.)",
+  },
+  {
+    id: "active-active-vs-active-passive",
+    title: "Active-Active vs Active-Passive Multi-Region",
+    optionA: {
+      name: "Active-Active",
+      pros: [
+        "Both regions serve traffic — lower latency for nearby users",
+        "All provisioned capacity is doing work",
+        "Failover is just traffic shifting — region loss degrades, not breaks",
+      ],
+      cons: [
+        "Concurrent writes in both regions can conflict",
+        "Needs conflict resolution: conflict-free design, CRDTs, or region-pinned writes",
+        "Cross-region replication lag means regions can briefly disagree",
+      ],
+    },
+    optionB: {
+      name: "Active-Passive",
+      pros: [
+        "Single write region — simple, strong consistency story",
+        "No write conflicts to resolve",
+        "Easier to reason about and operate",
+      ],
+      cons: [
+        "Failover takes time (RTO) and may lose unreplicated writes (RPO)",
+        "Standby capacity sits mostly idle",
+        "Remote users pay cross-region write latency",
+        "Failover paths rot unless regularly tested",
+      ],
+    },
+    whenToChooseA: "For global, latency-sensitive products that can resolve or avoid write conflicts (DynamoDB global tables, CRDT-based or region-pinned designs).",
+    whenToChooseB: "For systems where consistency is paramount and an RTO of minutes is acceptable (classic primary/DR Postgres setups).",
   },
 ];

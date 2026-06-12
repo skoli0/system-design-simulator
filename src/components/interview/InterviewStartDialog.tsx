@@ -10,6 +10,7 @@ import {
   Search,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { ModalShell } from "@/components/dialogs/ModalShell";
 
 const PHASE_ICONS: Record<string, ReactNode> = {
   ClipboardList: <ClipboardList className="h-4 w-4" />,
@@ -29,8 +30,6 @@ export function InterviewStartDialog({ open, onClose }: InterviewStartDialogProp
   const phases = useInterviewStore((s) => s.phases);
   const startInterview = useInterviewStore((s) => s.startInterview);
 
-  if (!open) return null;
-
   const totalMinutes = phases.reduce((sum, p) => sum + p.targetMinutes, 0);
 
   const handleStart = () => {
@@ -39,12 +38,12 @@ export function InterviewStartDialog({ open, onClose }: InterviewStartDialogProp
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-
-      {/* Dialog */}
-      <div className="relative z-10 w-full max-w-md rounded-lg border border-zinc-700 bg-zinc-900 p-6 shadow-xl">
+    <ModalShell
+      open={open}
+      onClose={onClose}
+      panelClassName="max-w-md border-zinc-700 p-6 shadow-xl"
+      ariaLabel="Practice interview mode"
+    >
         <h2 className="text-base font-semibold text-zinc-100">
           Practice Interview Mode
         </h2>
@@ -65,9 +64,9 @@ export function InterviewStartDialog({ open, onClose }: InterviewStartDialogProp
               </div>
               <div className="flex-1">
                 <p className="text-xs font-medium text-zinc-200">{phase.name}</p>
-                <p className="text-[10px] text-zinc-500">{phase.description}</p>
+                <p className="text-[10px] text-zinc-400">{phase.description}</p>
               </div>
-              <span className="font-mono text-[10px] text-zinc-500">
+              <span className="font-mono text-[10px] text-zinc-400">
                 {phase.targetMinutes} min
               </span>
             </div>
@@ -84,12 +83,12 @@ export function InterviewStartDialog({ open, onClose }: InterviewStartDialogProp
           </button>
           <button
             onClick={handleStart}
+            data-autofocus
             className="rounded-md bg-cyan-500 px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-cyan-400"
           >
             Start Interview
           </button>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }

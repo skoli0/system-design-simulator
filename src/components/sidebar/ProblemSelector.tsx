@@ -52,13 +52,22 @@ export function ProblemSelector({ onCreateProblem }: ProblemSelectorProps) {
           Create Custom Problem
         </button>
 
-        {/* Custom problems */}
+        {/* Custom problems — row is a div[role=button] so the delete X can be
+            a real <button> (button-in-button is invalid HTML) */}
         {customProblems.map((problem) => (
-          <button
+          <div
             key={problem.id}
+            role="button"
+            tabIndex={0}
             onClick={() => setSelectedProblem(problem.id)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setSelectedProblem(problem.id);
+              }
+            }}
             aria-pressed={problem.id === selectedProblemId}
-            className={`group flex w-full flex-col gap-1.5 rounded-md px-2.5 py-2 text-left transition-colors ${
+            className={`group flex w-full cursor-pointer flex-col gap-1.5 rounded-md px-2.5 py-2 text-left transition-colors ${
               problem.id === selectedProblemId
                 ? "border border-zinc-700 bg-zinc-800"
                 : "border border-transparent hover:bg-zinc-800"
@@ -91,8 +100,9 @@ export function ProblemSelector({ onCreateProblem }: ProblemSelectorProps) {
                 </Badge>
                 <button
                   onClick={(e) => handleDeleteCustom(e, problem.id)}
-                  className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-zinc-500 opacity-0 transition-opacity hover:text-rose-400 group-hover:opacity-100"
+                  className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-zinc-500 opacity-60 transition-opacity hover:text-rose-400 group-focus-within:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
                   title="Delete custom problem"
+                  aria-label={`Delete custom problem ${problem.title}`}
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -105,7 +115,7 @@ export function ProblemSelector({ onCreateProblem }: ProblemSelectorProps) {
                 </span>
               ))}
             </div>
-          </button>
+          </div>
         ))}
 
         {/* Separator if there are custom problems */}

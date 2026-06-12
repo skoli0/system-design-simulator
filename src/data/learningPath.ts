@@ -19,6 +19,9 @@ export const LEARNING_PATH: LearningTier[] = [
       "distributed-cache",
       "instagram",
       "music-streaming",
+      "reddit",
+      "location-service",
+      "tinder",
     ],
   },
   {
@@ -30,6 +33,11 @@ export const LEARNING_PATH: LearningTier[] = [
       "web-crawler",
       "file-storage",
       "ecommerce",
+      "airbnb",
+      "whatsapp",
+      "food-delivery",
+      "code-editor",
+      "cicd-pipeline",
     ],
   },
   {
@@ -43,6 +51,13 @@ export const LEARNING_PATH: LearningTier[] = [
       "collaborative-editor",
       "team-messaging",
       "metrics-monitoring",
+      "netflix",
+      "google-maps",
+      "zoom",
+      "search-engine",
+      "tiktok",
+      "message-queue-design",
+      "digital-wallet",
     ],
   },
 ];
@@ -95,6 +110,21 @@ export const PROBLEM_CONCEPTS: ConceptPrerequisite[] = [
     prerequisites: ["caching", "cdn"],
   },
   {
+    problemId: "reddit",
+    concepts: ["ranking-algorithms", "comment-trees", "vote-counting"],
+    prerequisites: ["caching", "ranking", "async-processing"],
+  },
+  {
+    problemId: "location-service",
+    concepts: ["geospatial-indexing", "quadtree", "proximity-search"],
+    prerequisites: ["caching", "read-heavy-design"],
+  },
+  {
+    problemId: "tinder",
+    concepts: ["match-detection", "elo-scoring", "bloom-filter"],
+    prerequisites: ["geospatial-indexing", "caching", "async-processing"],
+  },
+  {
     problemId: "twitter-feed",
     concepts: ["fan-out", "timeline", "hybrid-approach"],
     prerequisites: ["caching", "async-processing", "feed-generation"],
@@ -120,9 +150,34 @@ export const PROBLEM_CONCEPTS: ConceptPrerequisite[] = [
     prerequisites: ["caching", "async-processing", "message-queue"],
   },
   {
+    problemId: "airbnb",
+    concepts: ["availability-calendar", "reservation-holds", "faceted-search"],
+    prerequisites: ["search-indexing", "geospatial-indexing", "concurrency", "caching"],
+  },
+  {
+    problemId: "whatsapp",
+    concepts: ["e2e-encryption", "store-and-forward", "delivery-receipts"],
+    prerequisites: ["websocket", "message-ordering", "message-queue"],
+  },
+  {
+    problemId: "food-delivery",
+    concepts: ["dispatch-matching", "eta-prediction", "order-state-machine", "stream-processing"],
+    prerequisites: ["geospatial-indexing", "message-queue", "state-management"],
+  },
+  {
+    problemId: "code-editor",
+    concepts: ["sandboxed-execution", "container-isolation", "lsp"],
+    prerequisites: ["websocket", "async-processing", "concurrency"],
+  },
+  {
+    problemId: "cicd-pipeline",
+    concepts: ["dag-scheduling", "artifact-storage", "deployment-strategies"],
+    prerequisites: ["message-queue", "async-processing", "state-management"],
+  },
+  {
     problemId: "ride-sharing",
-    concepts: ["geospatial-indexing", "matching-algorithm", "real-time-tracking"],
-    prerequisites: ["websocket", "async-processing", "consistent-hashing"],
+    concepts: ["matching-algorithm", "real-time-tracking", "surge-pricing"],
+    prerequisites: ["websocket", "geospatial-indexing", "consistent-hashing"],
   },
   {
     problemId: "video-streaming",
@@ -152,6 +207,41 @@ export const PROBLEM_CONCEPTS: ConceptPrerequisite[] = [
   {
     problemId: "metrics-monitoring",
     concepts: ["time-series-db", "aggregation-pipeline", "alerting"],
-    prerequisites: ["streaming-protocol", "async-processing", "message-queue"],
+    prerequisites: ["stream-processing", "async-processing", "message-queue"],
+  },
+  {
+    problemId: "netflix",
+    concepts: ["open-connect-cdn", "abr-ladder", "precomputed-recommendations"],
+    prerequisites: ["cdn", "adaptive-bitrate", "edge-caching", "recommendation"],
+  },
+  {
+    problemId: "google-maps",
+    concepts: ["tile-pyramid", "shortest-path-routing", "traffic-ingestion"],
+    prerequisites: ["geospatial-indexing", "cdn", "stream-processing", "caching"],
+  },
+  {
+    problemId: "zoom",
+    concepts: ["webrtc", "sfu-architecture", "simulcast"],
+    prerequisites: ["websocket", "streaming-protocol", "async-processing"],
+  },
+  {
+    problemId: "search-engine",
+    concepts: ["inverted-index", "pagerank", "scatter-gather"],
+    prerequisites: ["crawling", "url-frontier", "ranking", "search-indexing"],
+  },
+  {
+    problemId: "tiktok",
+    concepts: ["two-tower-model", "candidate-generation", "cold-start"],
+    prerequisites: ["recommendation", "feed-generation", "stream-processing", "cdn"],
+  },
+  {
+    problemId: "message-queue-design",
+    concepts: ["partitioned-log", "consumer-groups", "isr-replication"],
+    prerequisites: ["message-queue", "replication", "consistent-hashing"],
+  },
+  {
+    problemId: "digital-wallet",
+    concepts: ["double-entry-ledger", "exactly-once-execution", "reconciliation"],
+    prerequisites: ["idempotency", "saga-pattern", "ledger", "distributed-locking"],
   },
 ];

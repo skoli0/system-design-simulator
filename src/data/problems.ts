@@ -11,12 +11,12 @@ export const PROBLEMS: Problem[] = [
     requirements: {
       readsPerSec: 100000,
       writesPerSec: 1000,
-      storageGB: 500,
+      storageGB: 75000,
       latencyMs: 100,
       users: "100M DAU",
     },
     constraints: [
-      "Short URLs should be unique and non-predictable (base62 or base58 encoding)",
+      "Short codes must be unique and non-enumerable — use random key generation or a Key Generation Service rather than base62-encoding a sequential counter (predictable/enumerable)",
       "Redirect latency < 100ms at p99 — users should not notice any delay",
       "System should handle 100:1 read/write ratio",
       "URLs should expire after a configurable TTL (default 5 years)",
@@ -31,9 +31,19 @@ export const PROBLEMS: Problem[] = [
           "Consider DNS → Load Balancer → App Server → Database as your starting flow.",
       },
       {
+        title: "301 vs 302 redirects",
+        content:
+          "A 301 (permanent) redirect is cached by browsers, so repeat clicks skip your servers entirely — less load, but you lose visibility into those clicks, which kills analytics. A 302 (temporary) redirect forces every hit through your service, so you can count clicks and capture referrer/geo data at the cost of more traffic. Choose based on whether click analytics is a core requirement.",
+      },
+      {
         title: "Think about reads",
         content:
-          "Most requests are reads (redirects). A cache layer can dramatically reduce DB load.",
+          "Most requests are reads (redirects). A cache layer can dramatically reduce DB load. Watch for cache stampede on hot links: when a viral link's cache entry expires, thousands of concurrent requests hit the DB simultaneously. Mitigate with request coalescing (only one request refills the cache while the rest wait on it) and TTL jitter (randomize expiry so hot entries don't all expire at once).",
+      },
+      {
+        title: "Key generation strategies",
+        content:
+          "Compare three approaches: (1) base62-encoding an auto-increment counter — simple and collision-free, but sequential, so short codes are predictable and enumerable; (2) random keys — non-enumerable, but each insert must handle collisions; (3) a Key Generation Service that pre-generates random keys offline — non-enumerable AND collision-free at write time.",
       },
       {
         title: "Scaling writes",
@@ -54,6 +64,7 @@ export const PROBLEMS: Problem[] = [
         { componentId: "rate-limiter", x: 300, y: 400 },
         { componentId: "app-server", x: 500, y: 250 },
         { componentId: "cache", x: 500, y: 100 },
+        { componentId: "id-generator", x: 500, y: 400 },
         { componentId: "nosql-db", x: 700, y: 250 },
         { componentId: "monitoring", x: 700, y: 100 },
       ],
@@ -63,6 +74,7 @@ export const PROBLEMS: Problem[] = [
         { source: "load-balancer", target: "rate-limiter" },
         { source: "rate-limiter", target: "app-server" },
         { source: "app-server", target: "cache" },
+        { source: "app-server", target: "id-generator" },
         { source: "app-server", target: "nosql-db" },
         { source: "app-server", target: "monitoring" },
       ],
@@ -74,10 +86,10 @@ export const PROBLEMS: Problem[] = [
     title: "Twitter / News Feed",
     difficulty: "Hard",
     description:
-      "Design a social media feed like Twitter (X). Users can post tweets, follow others, and see a personalized timeline ranked by relevance. The core challenge is fan-out: when a celebrity with 50M followers posts a tweet, how do you deliver it to all their followers' timelines without melting your infrastructure? Real systems like Twitter use a hybrid approach — pre-computing timelines for most users while handling high-follower accounts differently.",
+      "Design a social media feed like Twitter (X). Users can post tweets, follow others, and see a personalized timeline ranked by relevance. The core challenge is fan-out: when a celebrity with 50M followers posts a tweet, how do you deliver it to all their followers' timelines without melting your infrastructure? Real systems like Twitter use a hybrid approach — pre-computing timelines for most users while handling high-follower accounts differently. Expect roughly 250M DAU producing ~500M tweets per day (≈6K writes/sec) and a 100:1 read ratio on timelines (≈600K reads/sec).",
     requirements: {
-      readsPerSec: 100000,
-      writesPerSec: 1000,
+      readsPerSec: 600000,
+      writesPerSec: 6000,
       storageGB: 500000,
       latencyMs: 200,
       users: "250M DAU",
@@ -108,6 +120,16 @@ export const PROBLEMS: Problem[] = [
           "Use object storage (S3) for media with a CDN for global delivery.",
       },
       {
+        title: "Snowflake IDs for time-ordering",
+        content:
+          "Use Snowflake IDs for tweet IDs: a 64-bit ID composed of a 41-bit timestamp, 10-bit machine ID, and 12-bit sequence number. Because the timestamp occupies the high bits, IDs sort chronologically — sorting a timeline by ID IS sorting by creation time, with no separate timestamp index. Each node generates IDs independently with no central coordination.",
+      },
+      {
+        title: "Cursor-based pagination",
+        content:
+          "Paginate timelines with cursors, not OFFSET/LIMIT. Offsets break when new tweets arrive mid-scroll (items shift, causing duplicates or gaps) and get slower as the offset grows. Instead, the client sends the last tweet ID it saw and the server returns tweets where id < cursor — stable under inserts, constant cost per page, and a perfect fit with time-sorted Snowflake IDs.",
+      },
+      {
         title: "Advanced: Hybrid fan-out",
         content:
           "Set a follower threshold (e.g., 10K). Below it, fan-out-on-write pushes to followers' cached timelines. Above it, fan-out-on-read merges celebrity tweets at read time. This gives you the best of both approaches.",
@@ -122,7 +144,7 @@ export const PROBLEMS: Problem[] = [
         { componentId: "auth-service", x: 350, y: 420 },
         { componentId: "app-server", x: 500, y: 200 },
         { componentId: "cache", x: 500, y: 50 },
-        { componentId: "message-queue", x: 500, y: 380 },
+        { componentId: "pub-sub", x: 500, y: 380 },
         { componentId: "sql-db", x: 700, y: 200 },
         { componentId: "nosql-db", x: 700, y: 380 },
         { componentId: "object-storage", x: 350, y: 80 },
@@ -137,9 +159,9 @@ export const PROBLEMS: Problem[] = [
         { source: "api-gateway", target: "auth-service" },
         { source: "api-gateway", target: "app-server" },
         { source: "app-server", target: "cache" },
-        { source: "app-server", target: "message-queue" },
+        { source: "app-server", target: "pub-sub" },
         { source: "app-server", target: "sql-db" },
-        { source: "message-queue", target: "nosql-db" },
+        { source: "pub-sub", target: "nosql-db" },
         { source: "app-server", target: "search" },
         { source: "app-server", target: "monitoring" },
       ],
@@ -151,13 +173,13 @@ export const PROBLEMS: Problem[] = [
     title: "Chat System",
     difficulty: "Hard",
     description:
-      "Design a real-time chat application like WhatsApp, Slack, or Discord. Support 1:1 messaging, group chats with up to 1000 members, read receipts, typing indicators, and online presence. Messages must be delivered reliably and in order, even when users switch between devices. WhatsApp processes over 100 billion messages per day — the key challenges are maintaining persistent connections at scale and guaranteeing exactly-once delivery.",
+      "Design a real-time chat application like WhatsApp, Slack, or Discord. Support 1:1 messaging, group chats with up to 1000 members, read receipts, typing indicators, and online presence. Messages must be delivered reliably and in order, even when users switch between devices. WhatsApp processes over 100 billion messages per day — the key challenges are maintaining persistent connections at scale and achieving effectively-once delivery (at-least-once delivery plus client-side dedup via message IDs — true exactly-once delivery is impossible in a distributed system).",
     requirements: {
       readsPerSec: 50000,
       writesPerSec: 100000,
       storageGB: 50000,
       latencyMs: 50,
-      users: "500M DAU",
+      users: "200M DAU",
     },
     constraints: [
       "Messages delivered in under 50ms for online users via persistent WebSocket connections",
@@ -275,6 +297,7 @@ export const PROBLEMS: Problem[] = [
         { componentId: "cache", x: 500, y: 120 },
         { componentId: "message-queue", x: 500, y: 400 },
         { componentId: "stream-processor", x: 650, y: 400 },
+        { componentId: "geospatial-index", x: 850, y: 400 },
         { componentId: "nosql-db", x: 700, y: 250 },
         { componentId: "sql-db", x: 700, y: 120 },
         { componentId: "monitoring", x: 850, y: 250 },
@@ -289,6 +312,8 @@ export const PROBLEMS: Problem[] = [
         { source: "app-server", target: "message-queue" },
         { source: "message-queue", target: "stream-processor" },
         { source: "stream-processor", target: "nosql-db" },
+        { source: "stream-processor", target: "geospatial-index" },
+        { source: "app-server", target: "geospatial-index" },
         { source: "app-server", target: "sql-db" },
         { source: "app-server", target: "monitoring" },
       ],
@@ -311,7 +336,7 @@ export const PROBLEMS: Problem[] = [
     constraints: [
       "Videos transcoded into multiple resolutions (360p, 720p, 1080p, 4K) and codecs (H.264, VP9, AV1)",
       "Adaptive bitrate streaming (HLS/DASH) adjusts quality based on real-time bandwidth",
-      "Global delivery with < 200ms video start time for 95th percentile of users",
+      "Global delivery with < 1s video start time at the 95th percentile",
       "Support live streaming with < 5s glass-to-glass latency",
       "Recommendations engine producing personalized feeds from billions of videos",
       "Upload processing pipeline handles videos up to 256GB with resumable uploads",
@@ -492,6 +517,7 @@ export const PROBLEMS: Problem[] = [
         { componentId: "app-server", x: 500, y: 200 },
         { componentId: "message-queue", x: 500, y: 380 },
         { componentId: "cache", x: 500, y: 60 },
+        { componentId: "notification-service", x: 700, y: 470 },
         { componentId: "nosql-db", x: 700, y: 200 },
         { componentId: "sql-db", x: 700, y: 380 },
         { componentId: "monitoring", x: 850, y: 200 },
@@ -503,7 +529,8 @@ export const PROBLEMS: Problem[] = [
         { source: "api-gateway", target: "app-server" },
         { source: "app-server", target: "cache" },
         { source: "app-server", target: "message-queue" },
-        { source: "message-queue", target: "nosql-db" },
+        { source: "message-queue", target: "notification-service" },
+        { source: "notification-service", target: "nosql-db" },
         { source: "app-server", target: "sql-db" },
         { source: "app-server", target: "monitoring" },
         { source: "api-gateway", target: "rate-limiter" },
@@ -518,11 +545,11 @@ export const PROBLEMS: Problem[] = [
     description:
       "Design a search autocomplete system like Google's search suggestions or Algolia's instant search. As users type each character, the system returns the top 5-10 matching suggestions ranked by popularity, personalization, and recency within 100ms. Google processes over 8.5 billion searches per day with autocomplete triggering on every keystroke — the core challenges are building an efficient prefix-matching data structure (trie) and keeping suggestions fresh as search trends change in real-time.",
     requirements: {
-      readsPerSec: 200000,
+      readsPerSec: 400000,
       writesPerSec: 5000,
       storageGB: 100,
       latencyMs: 50,
-      users: "17B queries/day",
+      users: "500M+ DAU, ~8.5B searches/day",
     },
     constraints: [
       "Response time under 50ms at p99 — suggestions must appear as the user types each character",
@@ -698,17 +725,13 @@ export const PROBLEMS: Problem[] = [
         { componentId: "dns", x: 50, y: 250 },
         { componentId: "load-balancer", x: 200, y: 250 },
         { componentId: "app-server", x: 400, y: 250 },
-        { componentId: "cache", x: 600, y: 150 },
-        { componentId: "nosql-db", x: 600, y: 350 },
+        { componentId: "cache", x: 600, y: 250 },
         { componentId: "monitoring", x: 800, y: 250 },
-        { componentId: "service-mesh", x: 400, y: 100 },
       ],
       edges: [
         { source: "dns", target: "load-balancer" },
         { source: "load-balancer", target: "app-server" },
-        { source: "app-server", target: "service-mesh" },
-        { source: "service-mesh", target: "cache" },
-        { source: "cache", target: "nosql-db" },
+        { source: "app-server", target: "cache" },
         { source: "app-server", target: "monitoring" },
       ],
     },
@@ -1096,7 +1119,7 @@ export const PROBLEMS: Problem[] = [
     title: "Instagram / Photo Sharing",
     difficulty: "Medium",
     description:
-      "Design a photo and short-video sharing platform like Instagram. Users upload photos that are processed (resized, filtered, compressed), stored across a CDN, and displayed in a personalized feed. Instagram serves over 3 billion monthly active users and processes 100+ million photo uploads daily — the key challenges are building an efficient media processing pipeline, generating a ranked feed from thousands of candidate posts, and serving media globally with minimal latency using edge caching.",
+      "Design a photo and short-video sharing platform like Instagram. Users upload photos that are processed (resized, filtered, compressed), stored across a CDN, and displayed in a personalized feed. Instagram serves over 2 billion monthly active users and processes 100+ million photo uploads daily — the key challenges are building an efficient media processing pipeline, generating a ranked feed from thousands of candidate posts, and serving media globally with minimal latency using edge caching.",
     requirements: {
       readsPerSec: 150000,
       writesPerSec: 20000,
@@ -1148,6 +1171,7 @@ export const PROBLEMS: Problem[] = [
         { componentId: "object-storage", x: 720, y: 80 },
         { componentId: "nosql-db", x: 720, y: 250 },
         { componentId: "search", x: 720, y: 420 },
+        { componentId: "sharded-counter", x: 880, y: 80 },
         { componentId: "monitoring", x: 880, y: 250 },
       ],
       edges: [
@@ -1162,6 +1186,7 @@ export const PROBLEMS: Problem[] = [
         { source: "message-queue", target: "object-storage" },
         { source: "app-server", target: "nosql-db" },
         { source: "app-server", target: "search" },
+        { source: "app-server", target: "sharded-counter" },
         { source: "app-server", target: "monitoring" },
       ],
     },
@@ -1480,7 +1505,7 @@ export const PROBLEMS: Problem[] = [
     title: "Netflix / Video Streaming Platform",
     difficulty: "Hard",
     description:
-      "Design a video streaming platform like Netflix that serves personalized content to 325 million subscribers across 190+ countries. Netflix accounts for over 15% of global internet bandwidth during peak hours — the key challenges are building a content recommendation engine that drives 80% of watch time, implementing adaptive bitrate streaming (ABR) that adjusts quality frame-by-frame based on network conditions, and leveraging a global CDN (Open Connect) with ISP-embedded appliances to serve 17,000+ titles with sub-second start times.",
+      "Design a video streaming platform like Netflix that serves personalized content to 325 million subscribers across 190+ countries. Netflix accounts for over 15% of global internet bandwidth during peak hours — the key challenges are building a content recommendation engine that drives 80% of watch time, implementing adaptive bitrate streaming (ABR) that adjusts quality frame-by-frame based on network conditions, and leveraging a global CDN (Open Connect) with ISP-embedded appliances to serve 17,000+ titles with ~1s start times.",
     requirements: {
       readsPerSec: 300000,
       writesPerSec: 5000,
@@ -1522,6 +1547,7 @@ export const PROBLEMS: Problem[] = [
       nodes: [
         { componentId: "dns", x: 50, y: 250 },
         { componentId: "cdn", x: 200, y: 80 },
+        { componentId: "origin-shield", x: 350, y: 80 },
         { componentId: "load-balancer", x: 200, y: 250 },
         { componentId: "api-gateway", x: 350, y: 250 },
         { componentId: "auth-service", x: 350, y: 420 },
@@ -1537,7 +1563,8 @@ export const PROBLEMS: Problem[] = [
       edges: [
         { source: "dns", target: "cdn" },
         { source: "dns", target: "load-balancer" },
-        { source: "cdn", target: "object-storage" },
+        { source: "cdn", target: "origin-shield" },
+        { source: "origin-shield", target: "object-storage" },
         { source: "load-balancer", target: "api-gateway" },
         { source: "api-gateway", target: "auth-service" },
         { source: "api-gateway", target: "app-server" },
@@ -1605,6 +1632,7 @@ export const PROBLEMS: Problem[] = [
         { componentId: "cache", x: 530, y: 80 },
         { componentId: "nosql-db", x: 720, y: 200 },
         { componentId: "object-storage", x: 720, y: 80 },
+        { componentId: "geospatial-index", x: 880, y: 80 },
         { componentId: "message-queue", x: 530, y: 420 },
         { componentId: "stream-processor", x: 720, y: 420 },
         { componentId: "monitoring", x: 880, y: 250 },
@@ -1616,6 +1644,7 @@ export const PROBLEMS: Problem[] = [
         { source: "load-balancer", target: "api-gateway" },
         { source: "api-gateway", target: "app-server" },
         { source: "app-server", target: "cache" },
+        { source: "app-server", target: "geospatial-index" },
         { source: "app-server", target: "nosql-db" },
         { source: "app-server", target: "message-queue" },
         { source: "message-queue", target: "stream-processor" },
@@ -1630,13 +1659,13 @@ export const PROBLEMS: Problem[] = [
     title: "Google Maps / Navigation",
     difficulty: "Hard",
     description:
-      "Design a mapping and navigation platform like Google Maps that serves map tiles, computes optimal routes, provides real-time traffic updates, and estimates accurate ETAs. Google Maps serves over 1 billion daily active users and processes 1 billion kilometers of driving directions daily — the core challenges are serving pre-rendered map tiles at multiple zoom levels from a multi-petabyte tile corpus, computing shortest paths on a road graph with hundreds of millions of edges using hierarchical algorithms (Contraction Hierarchies / A*), and ingesting real-time GPS probe data from millions of devices to update traffic conditions every 30 seconds.",
+      "Design a mapping and navigation platform like Google Maps that serves map tiles, computes optimal routes, provides real-time traffic updates, and estimates accurate ETAs. Google Maps serves over 1 billion monthly active users and processes 1 billion kilometers of driving directions daily — the core challenges are serving pre-rendered map tiles at multiple zoom levels from a multi-petabyte tile corpus, computing shortest paths on a road graph with hundreds of millions of edges using hierarchical algorithms (Contraction Hierarchies / A*), and ingesting real-time GPS probe data from millions of devices to update traffic conditions every 30 seconds.",
     requirements: {
       readsPerSec: 500000,
       writesPerSec: 100000,
       storageGB: 5000000,
       latencyMs: 200,
-      users: "1B DAU",
+      users: "1B+ MAU",
     },
     constraints: [
       "Map tile serving at 20+ zoom levels — vector tiles for mobile, raster tiles for web, pre-rendered and cached at CDN edge",
@@ -1678,6 +1707,7 @@ export const PROBLEMS: Problem[] = [
         { componentId: "cache", x: 530, y: 80 },
         { componentId: "nosql-db", x: 720, y: 200 },
         { componentId: "object-storage", x: 720, y: 80 },
+        { componentId: "geospatial-index", x: 880, y: 80 },
         { componentId: "stream-processor", x: 530, y: 420 },
         { componentId: "timeseries-db", x: 720, y: 420 },
         { componentId: "monitoring", x: 880, y: 250 },
@@ -1689,6 +1719,7 @@ export const PROBLEMS: Problem[] = [
         { source: "load-balancer", target: "api-gateway" },
         { source: "api-gateway", target: "app-server" },
         { source: "app-server", target: "cache" },
+        { source: "app-server", target: "geospatial-index" },
         { source: "app-server", target: "nosql-db" },
         { source: "app-server", target: "stream-processor" },
         { source: "stream-processor", target: "timeseries-db" },
@@ -1866,7 +1897,7 @@ export const PROBLEMS: Problem[] = [
       {
         title: "Ranking algorithm",
         content:
-          "Reddit's hot ranking uses: score = log10(max(|ups - downs|, 1)) + sign(ups - downs) * (post_time - epoch) / 45000. Pre-compute rankings and cache the sorted feeds for each subreddit.",
+          "Reddit's hot ranking uses: score = sign(ups - downs) * log10(max(|ups - downs|, 1)) + (post_epoch_seconds - 1134028003) / 45000. Note the sign multiplies the LOG term, while the time term is unsigned and grows monotonically (the constant is Reddit's epoch, Dec 8, 2005). Every new post gets a huge time boost that older posts can never catch up to, while net votes add or subtract only logarithmically — 10x the votes is worth one extra 'point'. Pre-compute rankings and cache the sorted feeds for each subreddit.",
       },
       {
         title: "Comment tree storage",
@@ -1896,6 +1927,7 @@ export const PROBLEMS: Problem[] = [
         { componentId: "sql-db", x: 720, y: 350 },
         { componentId: "search", x: 880, y: 200 },
         { componentId: "message-queue", x: 530, y: 420 },
+        { componentId: "sharded-counter", x: 720, y: 420 },
         { componentId: "monitoring", x: 880, y: 350 },
       ],
       edges: [
@@ -1908,6 +1940,7 @@ export const PROBLEMS: Problem[] = [
         { source: "app-server", target: "sql-db" },
         { source: "app-server", target: "search" },
         { source: "app-server", target: "message-queue" },
+        { source: "message-queue", target: "sharded-counter" },
         { source: "message-queue", target: "nosql-db" },
         { source: "app-server", target: "monitoring" },
       ],
@@ -1925,7 +1958,7 @@ export const PROBLEMS: Problem[] = [
       writesPerSec: 10000,
       storageGB: 100000,
       latencyMs: 200,
-      users: "50M DAU",
+      users: "150M+ users, ~5M DAU",
     },
     constraints: [
       "Search with compound filters: location (geo-radius), date range availability, price range, guest count, amenities, property type",
@@ -1996,8 +2029,8 @@ export const PROBLEMS: Problem[] = [
     description:
       "Design an end-to-end encrypted messaging platform like WhatsApp that handles 100+ billion messages per day across 3 billion monthly active users. The server never sees plaintext message content — the core challenges are implementing the Signal Protocol for end-to-end encryption with perfect forward secrecy, reliably delivering messages to offline users (store-and-forward), efficiently fanning out messages in group chats (up to 1024 members), and synchronizing message state across multiple linked devices while maintaining encryption guarantees.",
     requirements: {
-      readsPerSec: 100000,
-      writesPerSec: 1000000,
+      readsPerSec: 2400000,
+      writesPerSec: 1200000,
       storageGB: 500000,
       latencyMs: 50,
       users: "3B MAU",
@@ -2008,6 +2041,8 @@ export const PROBLEMS: Problem[] = [
       "Group messaging up to 1024 members with Sender Keys protocol for efficient group encryption",
       "Media sharing with encrypted upload — media encrypted client-side, uploaded to object storage, decryption key sent in message",
       "Multi-device support (WhatsApp Web/Desktop) with message sync using companion device protocol",
+      "Per-conversation ordering — each conversation carries its own monotonically increasing sequence numbers so every device renders messages in the same order and can detect gaps after reconnect",
+      "Receipt state machine: sent (accepted by server) → delivered (reached recipient device) → read (viewed), with state transitions strictly forward-only per message per recipient",
       "Read receipts, typing indicators, and online presence as ephemeral signals (no persistent storage)",
     ],
     hints: [
@@ -2025,6 +2060,11 @@ export const PROBLEMS: Problem[] = [
         title: "Group messaging",
         content:
           "Use Sender Keys: the sender encrypts the message once with a shared group key, server fans out the ciphertext to all group members. This avoids N separate encryptions per message.",
+      },
+      {
+        title: "Ordering and receipt state machine",
+        content:
+          "Order messages with per-conversation sequence numbers, not global timestamps: the server (or the conversation's owning partition) assigns each message a monotonically increasing sequence within that conversation, so all devices agree on order and a client that reconnects can detect and fill gaps by asking for 'everything after seq N'. Receipts are a tiny state machine per (message, recipient): sent → delivered → read. Each transition is reported back to the sender as a small system message; transitions only move forward (a read message never becomes merely delivered), and duplicate receipt events are idempotent no-ops.",
       },
       {
         title: "Advanced: Multi-device sync",
@@ -2063,11 +2103,11 @@ export const PROBLEMS: Problem[] = [
     title: "Google Search / Search Engine",
     difficulty: "Hard",
     description:
-      "Design a web search engine like Google that crawls billions of web pages, builds an inverted index, ranks results by relevance, and returns the top results in under 200ms. Google processes over 8.5 billion searches per day across an index of hundreds of billions of pages (hundreds of petabytes) — the core challenges are building and maintaining a distributed inverted index that maps every word to the documents containing it, implementing a ranking algorithm (PageRank + hundreds of signals) that surfaces the most relevant results, and serving queries with sub-200ms latency by scattering the query across thousands of index shards in parallel.",
+      "Design a web search engine like Google that crawls billions of web pages, builds an inverted index, ranks results by relevance, and returns the top results in under 200ms. Google processes over 8.5 billion searches per day across an index of hundreds of billions of pages (on the order of 100 petabytes) — the core challenges are building and maintaining a distributed inverted index that maps every word to the documents containing it, implementing a ranking algorithm (PageRank + hundreds of signals) that surfaces the most relevant results, and serving queries with sub-200ms latency by scattering the query across thousands of index shards in parallel.",
     requirements: {
       readsPerSec: 500000,
       writesPerSec: 50000,
-      storageGB: 10000000,
+      storageGB: 100000000,
       latencyMs: 200,
       users: "8.5B queries/day",
     },
@@ -2186,6 +2226,7 @@ export const PROBLEMS: Problem[] = [
         { componentId: "cache", x: 530, y: 80 },
         { componentId: "nosql-db", x: 720, y: 200 },
         { componentId: "search", x: 720, y: 350 },
+        { componentId: "geospatial-index", x: 720, y: 80 },
         { componentId: "object-storage", x: 880, y: 200 },
         { componentId: "monitoring", x: 880, y: 350 },
       ],
@@ -2196,6 +2237,7 @@ export const PROBLEMS: Problem[] = [
         { source: "load-balancer", target: "api-gateway" },
         { source: "api-gateway", target: "app-server" },
         { source: "app-server", target: "cache" },
+        { source: "app-server", target: "geospatial-index" },
         { source: "app-server", target: "nosql-db" },
         { source: "app-server", target: "search" },
         { source: "app-server", target: "monitoring" },
@@ -2327,13 +2369,13 @@ export const PROBLEMS: Problem[] = [
         { componentId: "app-server", x: 300, y: 250 },
         { componentId: "nosql-db", x: 500, y: 150 },
         { componentId: "monitoring", x: 500, y: 350 },
-        { componentId: "distributed-lock", x: 300, y: 100 },
+        { componentId: "coordination-service", x: 300, y: 100 },
         { componentId: "service-discovery", x: 300, y: 400 },
       ],
       edges: [
         { source: "load-balancer", target: "app-server" },
         { source: "app-server", target: "nosql-db" },
-        { source: "app-server", target: "distributed-lock" },
+        { source: "app-server", target: "coordination-service" },
         { source: "app-server", target: "service-discovery" },
         { source: "app-server", target: "monitoring" },
       ],

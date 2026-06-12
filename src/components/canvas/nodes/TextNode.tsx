@@ -2,6 +2,7 @@
 
 import { memo, useState, useCallback, useRef, useEffect } from "react";
 import { type NodeProps, type Node, NodeResizer } from "@xyflow/react";
+import { useIsCoarsePointer } from "@/hooks/useBreakpoint";
 
 export interface TextNodeData {
   text: string;
@@ -17,12 +18,13 @@ const FONT_SIZE_CLASS: Record<string, string> = {
   lg: "text-lg",
 };
 
-const PLACEHOLDER = "Double-click to edit";
+const PLACEHOLDER = "Double-click (or tap) to edit";
 
 function TextNodeInner({ data, selected, id }: NodeProps<TextNodeType>) {
   const [editing, setEditing] = useState(false);
-  const [text, setText] = useState(data.text || PLACEHOLDER);
+  const [text, setText] = useState(data.text || "");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const isCoarse = useIsCoarsePointer();
 
   const fontClass = FONT_SIZE_CLASS[data.fontSize ?? "sm"] ?? "text-sm";
 
@@ -33,36 +35,67 @@ function TextNodeInner({ data, selected, id }: NodeProps<TextNodeType>) {
     }
   }, [editing]);
 
+  // Placeholder is purely presentational — never committed into data.text
   const displayText = editing ? text : (data.text || PLACEHOLDER);
-  const isPlaceholder = displayText === PLACEHOLDER;
+  const isPlaceholder = !editing && !data.text;
+
+  // Set when Escape reverts an edit so a trailing blur doesn't commit anyway
+  const cancelledRef = useRef(false);
 
   const commitEdit = useCallback(() => {
+    if (cancelledRef.current) {
+      cancelledRef.current = false;
+      return;
+    }
     setEditing(false);
-    const next = text.trim() === "" ? PLACEHOLDER : text;
-    if (text.trim() === "") setText(PLACEHOLDER);
+    const next = text.trim() === "" ? "" : text;
     const event = new CustomEvent("textnode:update", {
       detail: { id, text: next },
     });
     window.dispatchEvent(event);
   }, [text, id]);
 
+  const startEditing = useCallback(() => {
+    setText(data.text || "");
+    setEditing(true);
+  }, [data.text]);
+
   const handleDoubleClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      setText(data.text || "");
-      setEditing(true);
+      startEditing();
     },
-    [data.text],
+    [startEditing],
   );
+
+  // Touch devices have no double-click: tapping an already-selected note
+  // enters edit mode.
+  const handleClick = useCallback(() => {
+    if (!isCoarse || !selected || editing) return;
+    startEditing();
+  }, [isCoarse, selected, editing, startEditing]);
+
+  // Allow external "Edit text" buttons (e.g. the properties panel) to open
+  // the editor for this node.
+  useEffect(() => {
+    function onEditRequest(e: Event) {
+      if ((e as CustomEvent).detail?.id === id) startEditing();
+    }
+    window.addEventListener("textnode:edit", onEditRequest);
+    return () => window.removeEventListener("textnode:edit", onEditRequest);
+  }, [id, startEditing]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === "Escape") {
+        // Revert — discard the in-progress edit without committing
         e.stopPropagation();
-        commitEdit();
+        cancelledRef.current = true;
+        setText(data.text || "");
+        setEditing(false);
       }
     },
-    [commitEdit],
+    [data.text],
   );
 
   return (
@@ -72,7 +105,7 @@ function TextNodeInner({ data, selected, id }: NodeProps<TextNodeType>) {
         minWidth={140}
         minHeight={48}
         lineClassName="!border-cyan-500/40"
-        handleClassName="!h-2 !w-2 !rounded-sm !border !border-cyan-500 !bg-cyan-500/80"
+        handleClassName={`${isCoarse ? "!h-5 !w-5" : "!h-2 !w-2"} !rounded-sm !border !border-cyan-500 !bg-cyan-500/80`}
       />
       <div
         className={`
@@ -82,6 +115,7 @@ function TextNodeInner({ data, selected, id }: NodeProps<TextNodeType>) {
           ${editing ? "border border-dashed border-zinc-500 bg-zinc-900/70" : ""}
         `}
         onDoubleClick={handleDoubleClick}
+        onClick={handleClick}
       >
         {editing ? (
           <textarea

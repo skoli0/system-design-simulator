@@ -78,6 +78,40 @@ export const CONCEPT_LIBRARY: Record<string, ComponentConcept> = {
       "YouTube uses Google's CDN to deliver over 1 billion hours of video per day globally",
     ],
   },
+  "origin-shield": {
+    componentId: "origin-shield",
+    whenToUse: [
+      "Multi-PoP CDN deployments where many edge locations independently miss cache and each hits the origin",
+      "Protecting a capacity-limited origin from thundering-herd cache-miss storms (e.g., after a purge or for viral content)",
+      "Improving overall cache hit ratio — edges fetch from the shield, which is far more likely to have the object warm",
+      "Reducing origin egress costs by collapsing many edge fetches into few origin fetches",
+    ],
+    whenNotToUse: [
+      "Small sites served from one or few PoPs with low traffic — the extra layer adds latency without benefit",
+      "Latency-sensitive dynamic content that cannot be cached — every miss still traverses an extra hop",
+    ],
+    keyTradeoffs: [
+      "Extra hop on cache miss: edge -> shield -> origin adds latency compared to edge -> origin directly",
+      "Shield placement matters: choose a shield region close to the origin so the final fetch leg is short",
+      "Request collapsing deduplicates concurrent misses for the same object, but waiting requests queue behind the single fetch",
+      "The shield is itself a traffic concentration point — it must be sized and replicated so it does not become a bottleneck",
+    ],
+    interviewTips: [
+      "Bring up origin shield when asked 'what happens when the CDN misses?' — it shows you think beyond the edge layer",
+      "Explain request collapsing: N concurrent edge misses for one object become a single origin fetch",
+      "Mention that a shared mid-tier cache raises hit ratio because all edges benefit from each other's fetches",
+    ],
+    commonPatterns: [
+      { name: "Mid-Tier Cache", description: "A centralized caching layer between edge PoPs and origin — edges fetch from the shield instead of the origin" },
+      { name: "Request Collapsing", description: "Concurrent cache misses for the same object merge into a single origin request; all waiters share the response" },
+      { name: "Shield Near Origin", description: "Place the shield in the region closest to the origin to minimize the final fetch leg and origin connection count" },
+    ],
+    realWorldExamples: [
+      "Amazon CloudFront Origin Shield adds a centralized caching layer that improves cache hit ratio and reduces load on the origin",
+      "Fastly's shielding designates a single POP as the shield so all other POPs fetch from it rather than the origin",
+      "Video streaming platforms use shield tiers so a viral video's simultaneous edge misses do not stampede the origin",
+    ],
+  },
   "load-balancer": {
     componentId: "load-balancer",
     whenToUse: [
@@ -89,7 +123,7 @@ export const CONCEPT_LIBRARY: Record<string, ComponentConcept> = {
     whenNotToUse: [
       "Single-server setups where there is nothing to balance across",
       "Client-side load balancing in service mesh architectures may replace traditional LBs",
-      "UDP-heavy workloads where Layer 7 features are unnecessary — use Layer 4 NLB instead",
+      "Needing raw TCP/UDP throughput, ultra-low latency, or millions of connections — choose an L4 (network) load balancer over an L7 (application) one rather than skipping load balancing",
     ],
     keyTradeoffs: [
       "Layer 4 (TCP) vs Layer 7 (HTTP): L4 is faster but L7 enables content-based routing, sticky sessions, and header inspection",
@@ -390,6 +424,41 @@ export const CONCEPT_LIBRARY: Record<string, ComponentConcept> = {
       "Airbnb uses S3 for all user-uploaded images with CloudFront CDN for delivery",
     ],
   },
+  "file-store": {
+    componentId: "file-store",
+    whenToUse: [
+      "Shared POSIX file system access across many servers — NFS, AWS EFS, Azure Files",
+      "Legacy applications that expect a real file system: random writes, appends, directory listings, file locks",
+      "ML training datasets or render-farm assets that many compute nodes must read from a shared mount",
+      "CMS/WordPress-style uploads where multiple app servers read and write the same files",
+    ],
+    whenNotToUse: [
+      "Web-scale media serving with no POSIX requirement — object storage + CDN is cheaper and scales further",
+      "Structured records with frequent small updates — use a database instead",
+      "Single-server workloads where local block storage is simpler and faster",
+    ],
+    keyTradeoffs: [
+      "POSIX semantics (atomic renames, appends, locks) vs object storage's simple put/get model — convenience vs near-unlimited scale",
+      "Network file systems add per-operation latency vs local disk — metadata-heavy workloads with many small files suffer most",
+      "Managed services like EFS scale elastically but cost significantly more per GB than S3",
+      "Concurrent-writer consistency is the hard part — NFS close-to-open consistency surprises developers used to local disks",
+    ],
+    interviewTips: [
+      "Articulate the file vs object vs block storage decision — interviewers probe whether you know when POSIX is actually required",
+      "Default to object storage for media and backups; reach for a shared file system only when the app genuinely needs file semantics",
+      "Mention EFS/Azure Files as the managed lift-and-shift path for legacy apps that hardcode file system access",
+    ],
+    commonPatterns: [
+      { name: "Shared Mount", description: "Many servers mount the same NFS/EFS volume — shared state for uploads, configs, or training data without app changes" },
+      { name: "Lift and Shift", description: "Migrate a file-system-dependent legacy app to the cloud by swapping local disk for a managed file service" },
+      { name: "Hot/Cold Tiering", description: "Keep active files on the file system and move cold files to object storage via lifecycle automation" },
+    ],
+    realWorldExamples: [
+      "AWS EFS is a standard backing store for multi-instance WordPress and CMS deployments that need shared uploads",
+      "VFX render farms mount shared NFS file systems so hundreds of render nodes read the same scene assets",
+      "ML teams use shared file systems (EFS, FSx for Lustre) so distributed training jobs across many nodes read one dataset",
+    ],
+  },
   search: {
     componentId: "search",
     whenToUse: [
@@ -495,6 +564,41 @@ export const CONCEPT_LIBRARY: Record<string, ComponentConcept> = {
       "Airbnb uses a service mesh for mTLS and observability across hundreds of microservices",
     ],
   },
+  "circuit-breaker": {
+    componentId: "circuit-breaker",
+    whenToUse: [
+      "Protecting services from cascading failures when a downstream dependency starts failing or slowing down",
+      "Failing fast instead of letting threads and connections pile up waiting on a dead dependency",
+      "Graceful degradation: return a fallback (cached data, default response) while the dependency recovers",
+      "Synchronous service-to-service call paths in a microservices architecture",
+    ],
+    whenNotToUse: [
+      "Simple in-process calls within a monolith — there is no network failure mode to guard against",
+      "Cases where sensible timeouts and bounded retries with backoff already provide enough protection",
+      "Asynchronous queue-based communication — the queue already decouples producers from consumer failures",
+    ],
+    keyTradeoffs: [
+      "Three states: closed (traffic flows, failures counted), open (fail fast after threshold), half-open (limited probes test recovery)",
+      "Threshold tuning is hard: too sensitive = the breaker trips on transient blips; too lenient = it never protects you",
+      "Fallback quality matters — failing fast only helps if you have something reasonable to return to the caller",
+      "Library-based (Resilience4j) vs infrastructure-based (Envoy/Istio outlier detection): fine-grained code control vs zero application changes",
+    ],
+    interviewTips: [
+      "Walk through the state machine (closed -> open -> half-open -> closed) — interviewers expect you to know the transitions",
+      "Pair circuit breakers with timeouts, retries with backoff, and bulkheads — they are complementary resilience patterns",
+      "Mention that Netflix Hystrix popularized the pattern but is now in maintenance mode, with Resilience4j as its recommended successor",
+    ],
+    commonPatterns: [
+      { name: "State Machine", description: "Closed passes traffic and counts failures; open fails fast; half-open lets a few probe requests through to test recovery" },
+      { name: "Fallback Response", description: "On an open circuit, return cached data, a default value, or a degraded experience instead of an error" },
+      { name: "Outlier Detection", description: "Service mesh proxies (Envoy) eject failing hosts from the load-balancing pool — circuit breaking without code changes" },
+    ],
+    realWorldExamples: [
+      "Netflix built Hystrix to isolate dependency failures across its microservices; it is now in maintenance mode, succeeded by Resilience4j",
+      "Envoy and Istio provide circuit breaking and outlier detection at the proxy layer for any service in the mesh",
+      "Resilience4j is the standard circuit breaker library in modern Java/Spring microservice stacks",
+    ],
+  },
   monitoring: {
     componentId: "monitoring",
     whenToUse: [
@@ -505,7 +609,7 @@ export const CONCEPT_LIBRARY: Record<string, ComponentConcept> = {
     ],
     whenNotToUse: [
       "Local development and testing — use debuggers and test assertions instead",
-      "Monitoring is never optional; the question is what level of investment is appropriate",
+      "Trivial single-instance hobby apps where reading logs directly is sufficient",
     ],
     keyTradeoffs: [
       "High cardinality metrics (per-user, per-endpoint) are powerful but expensive to store and query",
@@ -517,6 +621,7 @@ export const CONCEPT_LIBRARY: Record<string, ComponentConcept> = {
       "Mention the three pillars of observability: metrics, logs, and traces",
       "Discuss the RED method (Rate, Errors, Duration) for services and USE method for infrastructure",
       "Show you think about alerting — what to alert on, escalation policies, and runbooks",
+      "State that monitoring is non-negotiable for production systems — the real question is what level of investment fits the system's scale and criticality",
     ],
     commonPatterns: [
       { name: "RED Method", description: "Monitor Rate (throughput), Errors (failures), Duration (latency) for every service" },
@@ -735,7 +840,7 @@ export const CONCEPT_LIBRARY: Record<string, ComponentConcept> = {
     ],
     realWorldExamples: [
       "Prometheus TSDB powers monitoring at most Kubernetes-based organizations",
-      "Uber uses M3DB (their custom time-series DB) for billions of metrics per second",
+      "Uber uses M3DB (their custom time-series DB) for hundreds of millions of metrics per second",
       "Cloudflare uses a time-series database for network edge telemetry across 300+ data centers",
     ],
   },
@@ -771,7 +876,7 @@ export const CONCEPT_LIBRARY: Record<string, ComponentConcept> = {
     realWorldExamples: [
       "Spotify uses Google BigQuery for analytics across billions of daily streaming events",
       "Airbnb uses a data warehouse with Apache Hive and Spark for all business analytics",
-      "Netflix uses Redshift and custom tools to analyze billions of streaming events for content recommendations",
+      "Netflix runs an S3-based data lake queried with Presto/Trino over Apache Iceberg tables to analyze billions of streaming events",
     ],
   },
   "service-discovery": {
@@ -788,7 +893,7 @@ export const CONCEPT_LIBRARY: Record<string, ComponentConcept> = {
       "Serverless architectures where the platform handles service routing (e.g., API Gateway + Lambda)",
     ],
     keyTradeoffs: [
-      "Client-side discovery (Consul, eureka) gives more control but embeds logic in every service",
+      "Client-side discovery (Consul, Eureka) gives more control but embeds logic in every service",
       "Server-side discovery (AWS ALB, K8s Services) is simpler but less flexible for routing",
       "Consistency: stale service registry entries cause requests to dead instances",
       "CP vs AP: Consul (CP) may reject reads during partition; Eureka (AP) may return stale data",
@@ -799,7 +904,7 @@ export const CONCEPT_LIBRARY: Record<string, ComponentConcept> = {
       "Discuss health checks and how fast unhealthy instances are removed from the registry",
     ],
     commonPatterns: [
-      { name: "Client-side Discovery", description: "Clients query a registry (Consul, eureka) and load-balance across returned instances" },
+      { name: "Client-side Discovery", description: "Clients query a registry (Consul, Eureka) and load-balance across returned instances" },
       { name: "Server-side Discovery", description: "Clients hit a load balancer; the LB queries the registry and routes to healthy instances" },
       { name: "DNS-based Discovery", description: "Services register DNS records; consumers resolve service names to IPs via DNS" },
     ],
@@ -877,6 +982,41 @@ export const CONCEPT_LIBRARY: Record<string, ComponentConcept> = {
       "Amazon uses distributed locks for inventory management to prevent overselling during flash sales",
       "Google uses Chubby (their distributed lock service) for leader election and GFS master coordination",
       "Stripe uses Redis-based locks to prevent double-charging during payment processing retries",
+    ],
+  },
+  "coordination-service": {
+    componentId: "coordination-service",
+    whenToUse: [
+      "Leader election: guaranteeing exactly one active instance of a scheduler, controller, or primary node",
+      "Distributed locks and coordination primitives backed by consensus (ZooKeeper, etcd, Consul)",
+      "Cluster membership and failure detection — tracking which nodes are alive and what roles they hold",
+      "Strongly consistent storage for small, critical metadata: configuration, partition assignments, schema versions",
+    ],
+    whenNotToUse: [
+      "Small systems with no leader election or coordination needs — a consensus cluster is heavyweight infrastructure to operate",
+      "When your existing datastore can provide locking (e.g., Redis SET NX with its weaker guarantees, or Postgres advisory locks)",
+      "General-purpose data storage — coordination services are built for small metadata, not application data",
+    ],
+    keyTradeoffs: [
+      "Consensus (ZAB for ZooKeeper, Raft for etcd/Consul) gives strong consistency but requires a quorum — writes stall if the majority is down",
+      "Write throughput is limited because every write goes through consensus rounds — keep data small and writes infrequent",
+      "Running a consensus cluster (3 or 5 nodes, odd quorum sizes, leader failover) is real operational burden",
+      "Ephemeral nodes/leases and watches enable elegant failure detection, but session expiry tuning is tricky (too short = flapping, too long = slow failover)",
+    ],
+    interviewTips: [
+      "Name the consensus algorithm: ZooKeeper uses ZAB while etcd and Consul use Raft — it signals real depth",
+      "Mention that Kafka historically depended on ZooKeeper but replaced it with its own Raft-based KRaft mode in Kafka 3.x+",
+      "Stress that it is for coordination metadata only — storing application data in ZooKeeper/etcd is a classic anti-pattern",
+    ],
+    commonPatterns: [
+      { name: "Leader Election", description: "Candidates create ephemeral sequential nodes; the lowest sequence wins; when its session drops, the next candidate takes over" },
+      { name: "Distributed Lock", description: "Consensus-backed locks tied to sessions or leases that auto-release when the holder disconnects" },
+      { name: "Watch/Notify", description: "Clients watch keys and are notified on change — drives config propagation and membership updates without polling" },
+    ],
+    realWorldExamples: [
+      "Kubernetes stores all cluster state in etcd, making it the consensus backbone of every K8s cluster",
+      "Kafka relied on ZooKeeper for controller election and metadata for a decade before replacing it with KRaft in Kafka 3.x",
+      "HBase and the Hadoop ecosystem use ZooKeeper for master election and cluster coordination",
     ],
   },
   "id-generator": {
@@ -1013,7 +1153,7 @@ export const CONCEPT_LIBRARY: Record<string, ComponentConcept> = {
     realWorldExamples: [
       "Spotify uses embeddings for podcast and music recommendations via approximate nearest-neighbor search",
       "Pinterest uses vector search for visual similarity in their 'More like this' feature",
-      "OpenAI's ChatGPT uses vector databases for retrieval-augmented generation in enterprise deployments",
+      "Discord uses pgvector to add vector similarity search on top of its existing PostgreSQL infrastructure for semantic search",
     ],
   },
   "geospatial-index": {
