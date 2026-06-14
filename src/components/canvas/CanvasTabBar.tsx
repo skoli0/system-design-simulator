@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus, X } from "lucide-react";
-import { useCanvasStore, isEditableDesignTab } from "@/store/canvasStore";
+import { useCanvasStore } from "@/store/canvasStore";
 import { useAppStore } from "@/store/appStore";
 
 export function CanvasTabBar() {
@@ -12,13 +12,7 @@ export function CanvasTabBar() {
   const createNewDesignTab = useCanvasStore((s) => s.createNewDesignTab);
   const showToast = useAppStore((s) => s.showToast);
 
-  const editableTabs = tabs.filter((t) => isEditableDesignTab(t));
-  const canCloseTab = (tabId: string) => {
-    const tab = tabs.find((t) => t.id === tabId);
-    if (!tab) return false;
-    if (tab.readOnly) return true;
-    return editableTabs.length > 1;
-  };
+  const canCloseTab = () => true;
 
   const handleNewDesign = () => {
     createNewDesignTab();
@@ -51,7 +45,7 @@ export function CanvasTabBar() {
               REF
             </span>
           )}
-          {canCloseTab(tab.id) && (
+          {canCloseTab() && (
             <button
               type="button"
               tabIndex={0}
@@ -79,8 +73,8 @@ export function CanvasTabBar() {
         type="button"
         onClick={handleNewDesign}
         className="flex h-6 shrink-0 items-center gap-1 rounded-md px-2 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        title="New design canvas"
-        aria-label="New design canvas"
+        title="Build an architecture that scales"
+        aria-label="New design — build an architecture that scales"
       >
         <Plus className="h-3 w-3" />
         <span className="hidden sm:inline">New</span>

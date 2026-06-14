@@ -3,10 +3,10 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { useAppStore } from "./appStore";
 import { useCanvasStore } from "./canvasStore";
 import { useCustomProblemsStore } from "./customProblemsStore";
-import { safeLocalStorage } from "./safeStorage";
+import { indexedDbStorage } from "@/lib/indexedDbStorage";
 import { PROBLEMS } from "@/data/problems";
 import {
-  captureMyDesignSnapshot,
+  captureActiveDesignSnapshot,
   restoreSnapshotToCanvas,
   type DesignSnapshot,
 } from "@/lib/designSnapshot";
@@ -413,7 +413,7 @@ export const useSavedDesignsStore = create<SavedDesignsState>()(
       activeDesignId: null,
 
       saveDesign: (name: string, options?: SaveDesignOptions) => {
-        const snapshot = captureMyDesignSnapshot();
+        const snapshot = captureActiveDesignSnapshot();
         const now = new Date().toISOString();
         const existingId = options?.designId ?? get().activeDesignId;
 
@@ -559,7 +559,7 @@ export const useSavedDesignsStore = create<SavedDesignsState>()(
       name: "systemsim-saved-designs",
       version: 2,
       skipHydration: true,
-      storage: createJSONStorage(() => safeLocalStorage),
+      storage: createJSONStorage(() => indexedDbStorage),
       migrate: (persisted, version) => {
         const state = (persisted ?? {}) as Record<string, unknown>;
         if (version < 2 && Array.isArray(state.designs)) {

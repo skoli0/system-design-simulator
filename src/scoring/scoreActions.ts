@@ -400,7 +400,7 @@ export function executeScoreSuggestion(
       const label = suggestion.label.replace(/^Add /, "");
       useAppStore.getState().showToast(
         wasEmpty
-          ? `Loaded reference into My Design${label ? ` — ${label} wired in` : ""}`
+          ? `Loaded reference into your design${label ? ` — ${label} wired in` : ""}`
           : `Added and connected ${label}`,
         "success"
       );
@@ -464,7 +464,7 @@ export function executeScoreSuggestion(
           onRescore?.();
           return true;
         }
-        useAppStore.getState().showToast("Add a database to My Design first", "info");
+        useAppStore.getState().showToast("Add a database to your design first", "info");
         return false;
       }
       updateNodeData(db.id, { replicas: 2 });
@@ -528,7 +528,7 @@ export function executeScoreSuggestion(
         getMyDesignState().nodes.filter((n) => n.type !== "text").length > 0;
       if (hasComponents) {
         ensureMyDesignTabActive();
-        useAppStore.getState().showToast("My Design already has components", "info");
+        useAppStore.getState().showToast("Your design already has components", "info");
         return true;
       }
       if (!ensureMyDesignSeededFromReference()) {
@@ -537,14 +537,14 @@ export function executeScoreSuggestion(
       }
       useAppStore
         .getState()
-        .showToast("Reference loaded into My Design — edit and improve", "success");
+        .showToast("Reference loaded into your design — edit and improve", "success");
       onRescore?.();
       return true;
     }
     case "open-components": {
       useAppStore.getState().setActiveLeftTab("components");
       useAppStore.getState().setLeftSidebarOpen(true);
-      useAppStore.getState().showToast("Pick components to add to My Design", "info");
+      useAppStore.getState().showToast("Pick components to add to your design", "info");
       return true;
     }
     case "rescore": {

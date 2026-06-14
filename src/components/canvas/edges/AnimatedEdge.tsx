@@ -60,7 +60,9 @@ function AnimatedEdgeInner({
     edgeData.bidirectional === true ||
     (sourceComp && targetComp && isRequestResponseEdge(sourceComp, targetComp));
 
-  const pathStyle = resolveEdgePathStyle(edgeData, defaultEdgePathStyle);
+  const pathFallback: EdgePathStyle =
+    !isEditable ? "elbow" : defaultEdgePathStyle;
+  const pathStyle = resolveEdgePathStyle(edgeData, pathFallback);
   const isAsync = edgeData.async === true;
   const protocol = edgeData.protocol;
   const label =

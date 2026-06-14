@@ -139,7 +139,7 @@ export function AppShell() {
     loadReferenceIntoTab(problem);
   }, [handlePickProblem]);
 
-  // Restore persisted state; fresh visits land on the empty My Design welcome screen
+  // Restore persisted state; fresh visits land on the home welcome screen
   const initialLoadDone = useRef(false);
   useEffect(() => {
     rehydrateAllStores().then(() => {
@@ -184,6 +184,26 @@ export function AppShell() {
         if (!isReadOnlyTab) {
           e.preventDefault();
           selectAllNodes();
+        }
+      }
+
+      if (key === "c" && (e.metaKey || e.ctrlKey)) {
+        const { tabs, activeTabId, copySelection } = useCanvasStore.getState();
+        const isReadOnlyTab = tabs.find((t) => t.id === activeTabId)?.readOnly === true;
+        if (!isReadOnlyTab) {
+          const copied = copySelection();
+          if (copied) e.preventDefault();
+        }
+      }
+
+      if (key === "v" && (e.metaKey || e.ctrlKey)) {
+        const { tabs, activeTabId, pasteSelection, pasteSelectionToNewTab } =
+          useCanvasStore.getState();
+        const isReadOnlyTab = tabs.find((t) => t.id === activeTabId)?.readOnly === true;
+        if (!isReadOnlyTab) {
+          e.preventDefault();
+          if (e.shiftKey) pasteSelectionToNewTab();
+          else pasteSelection();
         }
       }
 

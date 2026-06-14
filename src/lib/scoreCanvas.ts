@@ -3,9 +3,13 @@ import { scoreDesign } from "@/scoring/scorer";
 import type { ScoreResult } from "@/types/scoring";
 import { getProblemById } from "@/data/problems";
 import { loadReferenceIntoTab } from "@/lib/loadReference";
-import { MY_DESIGN_TAB_ID } from "@/lib/addComponentToCanvas";
 import { useAppStore } from "@/store/appStore";
-import { useCanvasStore, type ComponentNodeData } from "@/store/canvasStore";
+import {
+  useCanvasStore,
+  type ComponentNodeData,
+  isEditableDesignTab,
+  isHomeView,
+} from "@/store/canvasStore";
 
 export type ScorableSource = "active" | "reference";
 
@@ -22,27 +26,46 @@ function componentNodesFrom(nodes: Node[]): Node<ComponentNodeData>[] {
 }
 
 /**
- * Resolve which design to score. Prefers My Design when it has components;
- * otherwise falls back to the reference architecture for the selected problem.
+ * Resolve which design to score. Prefers the active editable tab when it has
+ * components; otherwise falls back to the reference architecture.
  */
 export function getScorableDesign(): ScorableDesign | null {
   const { nodes, edges, tabs, activeTabId } = useCanvasStore.getState();
 
-  const myDesignTab = tabs.find((t) => t.id === MY_DESIGN_TAB_ID);
-  const myDesignNodes =
-    activeTabId === MY_DESIGN_TAB_ID
-      ? componentNodesFrom(nodes)
-      : componentNodesFrom(myDesignTab?.nodes ?? []);
-  const myDesignEdges =
-    activeTabId === MY_DESIGN_TAB_ID ? edges : (myDesignTab?.edges ?? []);
+  const activeTab = activeTabId
+    ? tabs.find((t) => t.id === activeTabId)
+    : undefined;
 
-  if (myDesignNodes.length > 0) {
-    return {
-      nodes: myDesignNodes,
-      edges: myDesignEdges,
-      source: "active",
-      tabId: MY_DESIGN_TAB_ID,
-    };
+  if (isEditableDesignTab(activeTab)) {
+    const designNodes =
+      activeTabId === activeTab!.id
+        ? componentNodesFrom(nodes)
+        : componentNodesFrom(activeTab!.nodes);
+    const designEdges =
+      activeTabId === activeTab!.id ? edges : activeTab!.edges;
+
+    if (designNodes.length > 0) {
+      return {
+        nodes: designNodes,
+        edges: designEdges,
+        source: "active",
+        tabId: activeTab!.id,
+      };
+    }
+  }
+
+  if (!isHomeView(activeTabId)) {
+    for (const tab of tabs.filter((t) => isEditableDesignTab(t))) {
+      const designNodes = componentNodesFrom(tab.nodes);
+      if (designNodes.length > 0) {
+        return {
+          nodes: designNodes,
+          edges: tab.edges,
+          source: "active",
+          tabId: tab.id,
+        };
+      }
+    }
   }
 
   const problemId = useAppStore.getState().selectedProblemId;
@@ -93,6 +116,5 @@ export function runScoreForDesign(): ScoreResult | null {
   const design = getScorableDesign();
   if (!design) return null;
 
-  // Score in the panel without switching the canvas away from the user's tab.
   return scoreDesign(design.nodes, design.edges);
 }

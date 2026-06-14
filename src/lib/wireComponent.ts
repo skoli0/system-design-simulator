@@ -5,7 +5,6 @@ import {
   ensureMyDesignSeededFromReference,
   ensureMyDesignTabActive,
   focusMyDesignOnCanvas,
-  relayoutMyDesign,
 } from "@/lib/addComponentToCanvas";
 import { useCanvasStore, type ComponentNodeData } from "@/store/canvasStore";
 import { edgeDataForComponents } from "@/lib/edgeDefaults";
@@ -407,7 +406,6 @@ export function wireComponentIntoPath(componentId: string): number {
   }
 
   if (created > 0) {
-    relayoutMyDesign();
     focusMyDesignOnCanvas();
   }
   return created;

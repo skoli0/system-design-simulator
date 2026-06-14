@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useCanvasStore } from "@/store/canvasStore";
+import { useCanvasStore, isEditableDesignTab, isHomeView } from "@/store/canvasStore";
 import { usePenStore } from "@/store/penStore";
 import { useSessionVersionsStore } from "@/store/sessionVersionsStore";
 import { useHasHydrated } from "@/store/hydration";
@@ -9,7 +9,7 @@ import { useHasHydrated } from "@/store/hydration";
 const AUTO_SAVE_MS = 2000;
 
 /**
- * Debounced auto-save of "My Design" edits into the session version history.
+ * Debounced auto-save of the active editable design tab into session version history.
  */
 export function useDesignAutoSave(): void {
   const hasHydrated = useHasHydrated();
@@ -26,12 +26,15 @@ export function useDesignAutoSave(): void {
     };
 
     const unsubCanvas = useCanvasStore.subscribe((state, prev) => {
-      const myDesignChanged =
-        (state.activeTabId === "my-design" &&
-          (state.nodes !== prev.nodes || state.edges !== prev.edges)) ||
-        state.tabs !== prev.tabs;
+      if (isHomeView(state.activeTabId)) return;
+      const tab = state.tabs.find((t) => t.id === state.activeTabId);
+      const editable = isEditableDesignTab(tab);
+      const canvasChanged =
+        editable &&
+        (state.nodes !== prev.nodes || state.edges !== prev.edges);
+      const tabsChanged = state.tabs !== prev.tabs;
 
-      if (myDesignChanged) scheduleSave();
+      if (canvasChanged || tabsChanged) scheduleSave();
     });
 
     const unsubPen = usePenStore.subscribe((state, prev) => {

@@ -2,7 +2,6 @@ import type { Edge, Node } from "@xyflow/react";
 import { REF_NODE_HEIGHT, REF_NODE_WIDTH } from "@/lib/loadReference";
 import { PLACE_SNAP_THRESHOLD } from "@/lib/nodeAlignment";
 import { useCanvasStore } from "@/store/canvasStore";
-import { wireNodeIntoPath } from "@/lib/wireComponent";
 
 function nodeCenter(node: Node): { x: number; y: number } {
   const w = typeof node.width === "number" ? node.width : REF_NODE_WIDTH;
@@ -119,17 +118,12 @@ export function findSpatialNeighbors(
   return { upstream, downstream };
 }
 
-function edgeExists(edges: Edge[], source: string, target: string): boolean {
-  return edges.some((e) => e.source === source && e.target === target);
-}
-
 /**
- * Insert a newly added node into the graph: split an existing edge (A→B → A→new→B)
- * or bridge spatial neighbors (A … new … B → A→new→B).
- * Falls back to reference/fallback wiring when neither applies.
+ * Insert a newly added node into the graph when dropped on an existing edge
+ * (A→B becomes A→new→B). Otherwise leave it unconnected for manual wiring.
  */
 export function wireDroppedNode(newNodeId: string): number {
-  const { nodes, edges, spliceNodeIntoEdge, addEdgeDirect } = useCanvasStore.getState();
+  const { nodes, edges, spliceNodeIntoEdge } = useCanvasStore.getState();
   const newNode = nodes.find((n) => n.id === newNodeId);
   if (!newNode || newNode.type !== "component") return 0;
 
@@ -143,28 +137,14 @@ export function wireDroppedNode(newNodeId: string): number {
 
   const neighbors = findSpatialNeighbors(newNode, componentNodes);
   if (neighbors) {
-    const { upstream, downstream } = neighbors;
     const directEdge = edges.find(
-      (e) => e.source === upstream.id && e.target === downstream.id,
+      (e) => e.source === neighbors.upstream.id && e.target === neighbors.downstream.id,
     );
     if (directEdge) {
       spliceNodeIntoEdge(newNodeId, directEdge.id);
       return 2;
     }
-
-    const liveEdges = useCanvasStore.getState().edges;
-    let created = 0;
-
-    if (!edgeExists(liveEdges, upstream.id, newNodeId)) {
-      addEdgeDirect(upstream.id, newNodeId);
-      created += 1;
-    }
-    if (!edgeExists(useCanvasStore.getState().edges, newNodeId, downstream.id)) {
-      addEdgeDirect(newNodeId, downstream.id);
-      created += 1;
-    }
-    if (created > 0) return created;
   }
 
-  return wireNodeIntoPath(newNodeId);
+  return 0;
 }

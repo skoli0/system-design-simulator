@@ -330,7 +330,7 @@ export function buildReferenceGraph(problem: Problem): {
         source: sourceId,
         target: targetId,
         type: "animated",
-        data: edgeDataForComponents(ref.source, ref.target),
+        data: edgeDataForComponents(ref.source, ref.target, "elbow"),
       });
     }
   }

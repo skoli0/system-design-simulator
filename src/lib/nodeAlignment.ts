@@ -1,5 +1,6 @@
 import type { Node } from "@xyflow/react";
 import { REF_NODE_HEIGHT, REF_NODE_WIDTH } from "@/lib/loadReference";
+import type { EdgePathStyle } from "@/store/canvasStore";
 
 export const GRID_SIZE = 8;
 export const SNAP_THRESHOLD = 12;
@@ -153,4 +154,15 @@ export function alignNodesForConnection(
   return nodes.map((n) =>
     n.id === targetId ? { ...n, position: { x: alignedX, y: snapToGrid(n.position.y) } } : n,
   );
+}
+
+/** Align endpoints only for straight edges; curved/elbow and auto-wiring stay freeform. */
+export function maybeAlignNodesForConnection(
+  sourceId: string,
+  targetId: string,
+  nodes: Node[],
+  pathStyle: EdgePathStyle,
+): Node[] {
+  if (pathStyle !== "straight") return nodes;
+  return alignNodesForConnection(sourceId, targetId, nodes);
 }

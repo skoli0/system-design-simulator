@@ -1,8 +1,8 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { safeLocalStorage } from "./safeStorage";
+import { indexedDbStorage } from "@/lib/indexedDbStorage";
 import {
-  captureMyDesignSnapshot,
+  captureActiveDesignSnapshot,
   restoreSnapshotToCanvas,
   snapshotFingerprint,
   type DesignSnapshot,
@@ -38,7 +38,7 @@ export const useSessionVersionsStore = create<SessionVersionsState>()(
       lastFingerprint: null,
 
       pushVersion: (label?: string) => {
-        const snapshot = captureMyDesignSnapshot();
+        const snapshot = captureActiveDesignSnapshot();
         if (snapshot.nodes.length === 0 && snapshot.edges.length === 0) {
           return false;
         }
@@ -82,7 +82,7 @@ export const useSessionVersionsStore = create<SessionVersionsState>()(
       name: "systemsim-session-versions",
       version: 1,
       skipHydration: true,
-      storage: createJSONStorage(() => safeLocalStorage),
+      storage: createJSONStorage(() => indexedDbStorage),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       migrate: (state) => state as any,
     }

@@ -16,7 +16,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSimulationStore } from "@/store/simulationStore";
 import { runScoreForDesign } from "@/lib/scoreCanvas";
-import { MY_DESIGN_TAB_ID } from "@/lib/addComponentToCanvas";
+import { isEditableDesignTab } from "@/store/canvasStore";
 import { useAppStore } from "@/store/appStore";
 import { useCanvasStore } from "@/store/canvasStore";
 import type { CategoryScore, ScoreSuggestion } from "@/types/scoring";
@@ -172,16 +172,16 @@ export function ScoreReport() {
   const tabs = useCanvasStore((s) => s.tabs);
   const activeNodes = useCanvasStore((s) => s.nodes);
   const activeEdges = useCanvasStore((s) => s.edges);
-  const myDesignComponentCount = useMemo(() => {
-    const tab = tabs.find((t) => t.id === MY_DESIGN_TAB_ID);
-    const nodes = activeTabId === MY_DESIGN_TAB_ID ? activeNodes : (tab?.nodes ?? []);
-    return nodes.filter((n) => n.type !== "text").length;
+  const designComponentCount = useMemo(() => {
+    const tab = tabs.find((t) => t.id === activeTabId && isEditableDesignTab(t));
+    if (!tab) return 0;
+    const tabNodes = activeTabId === tab.id ? activeNodes : (tab.nodes ?? []);
+    return tabNodes.filter((n) => n.type !== "text").length;
   }, [tabs, activeTabId, activeNodes]);
-  const myDesignEdgeCount = useMemo(() => {
-    const tab = tabs.find((t) => t.id === MY_DESIGN_TAB_ID);
-    return activeTabId === MY_DESIGN_TAB_ID
-      ? activeEdges.length
-      : (tab?.edges?.length ?? 0);
+  const designEdgeCount = useMemo(() => {
+    const tab = tabs.find((t) => t.id === activeTabId && isEditableDesignTab(t));
+    if (!tab) return 0;
+    return activeTabId === tab.id ? activeEdges.length : (tab.edges?.length ?? 0);
   }, [tabs, activeTabId, activeEdges]);
 
   // Auto-score when the Score tab is open (covers example problems + reference tabs).
@@ -198,8 +198,8 @@ export function ScoreReport() {
     activeTabId,
     activeNodes.length,
     activeEdges.length,
-    myDesignComponentCount,
-    myDesignEdgeCount,
+    designComponentCount,
+    designEdgeCount,
     tabs,
     setScoreResult,
     setShowScore,
@@ -235,7 +235,7 @@ export function ScoreReport() {
         <div>
           <p className="text-xs font-medium text-foreground/80">Ready to evaluate</p>
           <p className="mt-1 max-w-[220px] text-xs text-muted-foreground">
-            Open the Score tab after adding components to My Design, or pick an
+            Open the Score tab after adding components to a design, or pick an
             example problem to score its reference architecture.
           </p>
         </div>
@@ -324,7 +324,7 @@ export function ScoreReport() {
                 Path to 100
               </p>
               <p className="text-[11px] text-muted-foreground">
-                Click a fix to load the reference into My Design, add missing
+                Click a fix to load the reference into your design, add missing
                 components, and update your score automatically.
               </p>
               <SuggestionButtons suggestions={topActions} onRescore={rescore} />

@@ -21,7 +21,12 @@ import { useHasHydrated } from "@/store/hydration";
 import "@xyflow/react/dist/style.css";
 import { nodeTypes } from "./nodes/nodeTypes";
 import { edgeTypes } from "./edges/edgeTypes";
-import { useCanvasStore, type ComponentNodeData } from "@/store/canvasStore";
+import {
+  useCanvasStore,
+  type ComponentNodeData,
+  isEditableDesignTab,
+  isHomeView,
+} from "@/store/canvasStore";
 import { usePenStore } from "@/store/penStore";
 import { useAppStore } from "@/store/appStore";
 import { useSimulationStore } from "@/store/simulationStore";
@@ -43,9 +48,7 @@ const emptyItem = {
 import { CanvasTabBar } from "./CanvasTabBar";
 import { PenOverlay } from "./PenOverlay";
 import { PenToolbar } from "./PenToolbar";
-import { SelectionToolbar } from "./SelectionToolbar";
 import { AlignmentGuides } from "./AlignmentGuides";
-import { isEditableDesignTab } from "@/store/canvasStore";
 
 interface DesignCanvasProps {
   onPickProblem?: () => void;
@@ -244,14 +247,90 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
     []
   );
 
+  const isHome = isHomeView(activeTabId);
   const isEmpty =
-    activeTabId === "my-design" &&
+    !isHome &&
     isEditable &&
     nodes.filter((n) => n.type !== "text").length === 0;
 
   return (
     <div ref={reactFlowWrapper} className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-      <CanvasTabBar />
+      {tabs.length > 0 && <CanvasTabBar />}
+
+      {isHome ? (
+        <div className="relative flex flex-1 items-center justify-center px-4 pb-4 md:pb-0">
+          <motion.div
+            variants={emptyContainer}
+            initial="hidden"
+            animate="show"
+            className="flex w-full max-w-lg flex-col items-center gap-6 text-center"
+          >
+            <motion.div
+              variants={emptyItem}
+              className="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 to-transparent shadow-[0_0_40px_-10px_rgba(6,182,212,0.4)]"
+            >
+              <Layers className="h-6 w-6 text-cyan-400" />
+            </motion.div>
+            <motion.div variants={emptyItem} className="space-y-1.5">
+              <h1 className="text-base font-semibold tracking-tight text-foreground md:text-lg">
+                Build an architecture that scales
+              </h1>
+              <p className="mx-auto max-w-sm text-xs leading-relaxed text-muted-foreground md:text-sm">
+                Pick a problem, drop infrastructure components onto the canvas, and get scored the way an interviewer would evaluate you.
+              </p>
+            </motion.div>
+
+            <motion.div variants={emptyItem} className="grid w-full gap-2 sm:grid-cols-2">
+              <QuickStartCard
+                icon={<BookOpen className="h-3.5 w-3.5" />}
+                title="Pick a problem"
+                hint="35 real interview questions"
+                onClick={onPickProblem}
+              />
+              <QuickStartCard
+                icon={<Sparkles className="h-3.5 w-3.5" />}
+                title="Load reference"
+                hint="Open a sample solution"
+                onClick={onLoadReference}
+              />
+              <QuickStartCard
+                icon={<GraduationCap className="h-3.5 w-3.5" />}
+                title="Practice interview"
+                hint="Timed 6-phase mock"
+                onClick={onStartInterview}
+                accent
+              />
+              <QuickStartCard
+                icon={<Layers className="h-3.5 w-3.5" />}
+                title="+ New"
+                hint="Build an architecture that scales"
+                onClick={() => {
+                  useCanvasStore.getState().createNewDesignTab();
+                  useAppStore.getState().showToast("New design canvas created", "success");
+                }}
+              />
+            </motion.div>
+
+            <motion.div variants={emptyItem} className="hidden flex-wrap items-center justify-center gap-3 text-[11px] text-muted-foreground md:flex">
+              <span className="flex items-center gap-1.5">
+                <MousePointer2 className="h-3 w-3" />
+                Drag from the sidebar
+              </span>
+              <span className="text-muted-foreground/40">·</span>
+              <span className="flex items-center gap-1">
+                <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px]">⌘E</kbd>
+                export
+              </span>
+              <span className="text-muted-foreground/40">·</span>
+              <span className="flex items-center gap-1">
+                <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px]">⌘↵</kbd>
+                simulate
+              </span>
+            </motion.div>
+          </motion.div>
+        </div>
+      ) : (
+        <div className="relative flex min-h-0 flex-1 flex-col">
       <div ref={canvasAreaRef} className="relative flex-1">
       <ReactFlow
         key={activeTabId}
@@ -304,7 +383,6 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
         <PenToolbar />
 
         {!isReadOnly && <AlignmentGuides guides={alignmentGuides} />}
-        {!isReadOnly && <SelectionToolbar />}
 
         {/* Read-only hint for reference tabs */}
         {isReadOnly && (
@@ -315,78 +393,20 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
         )}
       </div>
 
-      {/* Welcome / empty state */}
       {isEmpty && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-4 pb-4 md:pb-0">
-          <motion.div
-            variants={emptyContainer}
-            initial="hidden"
-            animate="show"
-            className="pointer-events-auto flex w-full max-w-lg flex-col items-center gap-6 text-center"
-          >
-            <motion.div
-              variants={emptyItem}
-              className="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 to-transparent shadow-[0_0_40px_-10px_rgba(6,182,212,0.4)]"
-            >
-              <Layers className="h-6 w-6 text-cyan-400" />
-            </motion.div>
-            <motion.div variants={emptyItem} className="space-y-1.5">
-              <h1 className="text-base font-semibold tracking-tight text-foreground md:text-lg">
-                Build an architecture that scales
-              </h1>
-              <p className="mx-auto max-w-sm text-xs leading-relaxed text-muted-foreground md:text-sm">
-                Pick a problem, drop infrastructure components onto the canvas, and get scored the way an interviewer would evaluate you.
-              </p>
-            </motion.div>
-
-            <motion.div variants={emptyItem} className="grid w-full gap-2 sm:grid-cols-2">
-              <QuickStartCard
-                icon={<BookOpen className="h-3.5 w-3.5" />}
-                title="Pick a problem"
-                hint="35 real interview questions"
-                onClick={onPickProblem}
-              />
-              <QuickStartCard
-                icon={<Sparkles className="h-3.5 w-3.5" />}
-                title="Load reference"
-                hint="Open a sample solution"
-                onClick={onLoadReference}
-              />
-              <QuickStartCard
-                icon={<GraduationCap className="h-3.5 w-3.5" />}
-                title="Practice interview"
-                hint="Timed 6-phase mock"
-                onClick={onStartInterview}
-                accent
-              />
-              <QuickStartCard
-                icon={<Layers className="h-3.5 w-3.5" />}
-                title="New design"
-                hint="Blank canvas with defaults"
-                onClick={() => {
-                  useCanvasStore.getState().createNewDesignTab();
-                  useAppStore.getState().showToast("New design canvas created", "success");
-                }}
-              />
-            </motion.div>
-
-            <motion.div variants={emptyItem} className="hidden flex-wrap items-center justify-center gap-3 text-[11px] text-muted-foreground md:flex">
-              <span className="flex items-center gap-1.5">
-                <MousePointer2 className="h-3 w-3" />
-                Drag from the sidebar
-              </span>
-              <span className="text-muted-foreground/40">·</span>
-              <span className="flex items-center gap-1">
-                <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px]">⌘E</kbd>
-                export
-              </span>
-              <span className="text-muted-foreground/40">·</span>
-              <span className="flex items-center gap-1">
-                <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px]">⌘↵</kbd>
-                simulate
-              </span>
-            </motion.div>
-          </motion.div>
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-4">
+          <div className="pointer-events-auto flex max-w-sm flex-col items-center gap-2 text-center">
+            <Layers className="h-5 w-5 text-cyan-400" />
+            <p className="text-sm font-medium text-foreground">
+              {activeTab?.label ?? "Design"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Drag components from the sidebar or paste with{" "}
+              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px]">⌘V</kbd>
+            </p>
+          </div>
+        </div>
+      )}
         </div>
       )}
     </div>

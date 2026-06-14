@@ -1,5 +1,10 @@
 import type { Node } from "@xyflow/react";
-import { useCanvasStore, type ComponentNodeData } from "@/store/canvasStore";
+import {
+  useCanvasStore,
+  type ComponentNodeData,
+  isEditableDesignTab,
+  isHomeView,
+} from "@/store/canvasStore";
 import { useAppStore } from "@/store/appStore";
 import { usePenStore, type Stroke } from "@/store/penStore";
 import { useSimulationStore } from "@/store/simulationStore";
@@ -12,51 +17,80 @@ import {
 
 export interface DesignSnapshot {
   problemId: string | null;
+  tabId?: string;
+  tabLabel?: string;
   nodes: SerializedNode[];
   edges: SerializedEdge[];
   strokes: Stroke[];
 }
 
-/** Read the editable "My Design" tab content (not the active reference tab). */
-export function captureMyDesignSnapshot(): DesignSnapshot {
+/** Snapshot the active editable design tab. Returns empty snapshot on home view. */
+export function captureActiveDesignSnapshot(): DesignSnapshot {
   const canvas = useCanvasStore.getState();
+  if (isHomeView(canvas.activeTabId)) {
+    return {
+      problemId: useAppStore.getState().selectedProblemId,
+      nodes: [],
+      edges: [],
+      strokes: usePenStore.getState().strokes,
+    };
+  }
+
+  const tab = canvas.tabs.find((t) => t.id === canvas.activeTabId);
+  const editable = isEditableDesignTab(tab);
+
   let nodes = canvas.nodes;
   let edges = canvas.edges;
+  let tabId = canvas.activeTabId ?? undefined;
+  let tabLabel = tab?.label;
 
-  if (canvas.activeTabId !== "my-design") {
-    const tab = canvas.tabs.find((t) => t.id === "my-design");
-    nodes = tab?.nodes ?? [];
-    edges = tab?.edges ?? [];
+  if (!editable && tab) {
+    nodes = tab.nodes ?? [];
+    edges = tab.edges ?? [];
   }
 
   return {
     problemId: useAppStore.getState().selectedProblemId,
+    tabId,
+    tabLabel,
     nodes: serializeNodes(nodes),
     edges: serializeEdges(edges),
     strokes: usePenStore.getState().strokes,
   };
 }
 
+/** @deprecated Use captureActiveDesignSnapshot. */
+export function captureMyDesignSnapshot(): DesignSnapshot {
+  return captureActiveDesignSnapshot();
+}
+
 export function snapshotFingerprint(snapshot: DesignSnapshot): string {
   return JSON.stringify({
     problemId: snapshot.problemId,
+    tabId: snapshot.tabId,
     nodes: snapshot.nodes,
     edges: snapshot.edges,
     strokes: snapshot.strokes,
   });
 }
 
-export function myDesignHasContent(): boolean {
+export function activeDesignHasContent(): boolean {
   const { nodes, edges, activeTabId, tabs } = useCanvasStore.getState();
-  if (activeTabId === "my-design") {
+  if (isHomeView(activeTabId)) return false;
+  const tab = tabs.find((t) => t.id === activeTabId);
+  if (!isEditableDesignTab(tab)) return false;
+  if (activeTabId === tab?.id) {
     return nodes.length > 0 || edges.length > 0;
   }
-  const tab = tabs.find((t) => t.id === "my-design");
   return (tab?.nodes.length ?? 0) > 0 || (tab?.edges.length ?? 0) > 0;
 }
 
-export function restoreSnapshotToCanvas(snapshot: DesignSnapshot): void {
-  const restoredNodes: Node[] = snapshot.nodes.map((n) => {
+export function myDesignHasContent(): boolean {
+  return activeDesignHasContent();
+}
+
+function deserializeSnapshotNodes(snapshot: DesignSnapshot): Node[] {
+  return snapshot.nodes.map((n) => {
     if (n.type === "text") {
       return {
         id: n.id,
@@ -76,8 +110,10 @@ export function restoreSnapshotToCanvas(snapshot: DesignSnapshot): void {
       data: { ...n.data } as ComponentNodeData,
     };
   });
+}
 
-  const restoredEdges = snapshot.edges.map((e) => ({
+function deserializeSnapshotEdges(snapshot: DesignSnapshot) {
+  return snapshot.edges.map((e) => ({
     id: e.id,
     type: e.type,
     source: e.source,
@@ -90,8 +126,15 @@ export function restoreSnapshotToCanvas(snapshot: DesignSnapshot): void {
       async: e.data?.async ?? false,
     },
   }));
+}
 
-  useCanvasStore.getState().loadMyDesignContent(restoredNodes, restoredEdges);
+export function restoreSnapshotToCanvas(snapshot: DesignSnapshot): void {
+  const restoredNodes = deserializeSnapshotNodes(snapshot);
+  const restoredEdges = deserializeSnapshotEdges(snapshot);
+
+  useCanvasStore.getState().ensureActiveDesignTab();
+  useCanvasStore.getState().loadActiveTabContent(restoredNodes, restoredEdges);
+
   usePenStore.getState().setStrokes(snapshot.strokes ?? []);
   if (snapshot.problemId) {
     useAppStore.getState().setSelectedProblem(snapshot.problemId);

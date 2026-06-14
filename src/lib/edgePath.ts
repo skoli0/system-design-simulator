@@ -32,7 +32,7 @@ export function buildEdgePath(
   if (pathStyle === "elbow") {
     const [path, labelX, labelY] = getSmoothStepPath({
       ...(params as GetSmoothStepPathParams),
-      borderRadius: 8,
+      borderRadius: 12,
     });
     return [path, labelX, labelY];
   }
