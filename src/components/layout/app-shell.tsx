@@ -13,11 +13,10 @@ import {
   runSimulationWithAnimation,
   stopSimulation,
 } from "@/lib/simulationRunner";
-import { loadReferenceIntoTab, selectProblemWithReference } from "@/lib/loadReference";
+import { loadReferenceIntoTab, syncSimulationLoadForProblem } from "@/lib/loadReference";
 import { getProblemById } from "@/data/problems";
 import { rehydrateAllStores } from "@/store/hydration";
 import { requestCanvasFitView, CANVAS_LAYOUT_SETTLE_MS } from "@/lib/canvasFitView";
-import { myDesignHasContent } from "@/lib/designSnapshot";
 import { useDesignAutoSave } from "@/hooks/useDesignAutoSave";
 import { Toast } from "@/components/ui/Toast";
 import { SaveDialog } from "@/components/dialogs/SaveDialog";
@@ -140,15 +139,14 @@ export function AppShell() {
     loadReferenceIntoTab(problem);
   }, [handlePickProblem]);
 
-  // Restore persisted state, then seed reference only for a blank canvas
-  const initialRefLoaded = useRef(false);
+  // Restore persisted state; fresh visits land on the empty My Design welcome screen
+  const initialLoadDone = useRef(false);
   useEffect(() => {
     rehydrateAllStores().then(() => {
-      if (initialRefLoaded.current) return;
-      initialRefLoaded.current = true;
-      if (!myDesignHasContent()) {
-        selectProblemWithReference(useAppStore.getState().selectedProblemId);
-      }
+      if (initialLoadDone.current) return;
+      initialLoadDone.current = true;
+      const problem = getProblemById(useAppStore.getState().selectedProblemId);
+      if (problem) syncSimulationLoadForProblem(problem);
       requestCanvasFitView(CANVAS_LAYOUT_SETTLE_MS + 100);
     });
   }, []);
@@ -165,16 +163,27 @@ export function AppShell() {
       const key = e.key.toLowerCase();
 
       if (e.key === "Delete" || e.key === "Backspace") {
-        const { selectedNodeId, selectedEdgeId, deleteNode, deleteEdge, tabs, activeTabId } =
+        const { selectedNodeIds, selectedEdgeIds, selectedNodeId, selectedEdgeId, deleteSelected, tabs, activeTabId } =
           useCanvasStore.getState();
         const isReadOnlyTab = tabs.find((t) => t.id === activeTabId)?.readOnly === true;
         if (isReadOnlyTab) return;
-        if (selectedNodeId) {
+        const hasSelection =
+          selectedNodeIds.length > 0 ||
+          selectedEdgeIds.length > 0 ||
+          selectedNodeId ||
+          selectedEdgeId;
+        if (hasSelection) {
           e.preventDefault();
-          deleteNode(selectedNodeId);
-        } else if (selectedEdgeId) {
+          deleteSelected();
+        }
+      }
+
+      if (key === "a" && (e.metaKey || e.ctrlKey)) {
+        const { tabs, activeTabId, selectAllNodes } = useCanvasStore.getState();
+        const isReadOnlyTab = tabs.find((t) => t.id === activeTabId)?.readOnly === true;
+        if (!isReadOnlyTab) {
           e.preventDefault();
-          deleteEdge(selectedEdgeId);
+          selectAllNodes();
         }
       }
 
@@ -221,9 +230,7 @@ export function AppShell() {
         if (mobileSidebarOpen) setMobileSidebarOpen(false);
         else if (mobileRightOpen) setMobileRightOpen(false);
         else {
-          // Clears both node and edge selection
-          useCanvasStore.getState().setSelectedNode(null);
-          useCanvasStore.getState().setSelectedEdge(null);
+          useCanvasStore.getState().clearSelection();
         }
       }
     }

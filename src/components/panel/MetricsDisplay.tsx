@@ -9,6 +9,7 @@ import { useCanvasStore, type ComponentNodeData } from "@/store/canvasStore";
 import { useAppStore } from "@/store/appStore";
 import {
   applySingleBottleneckFix,
+  describeBottleneckScale,
   getBottleneckFixes,
   type BottleneckFix,
 } from "@/engine/bottleneckFix";
@@ -29,6 +30,7 @@ export function MetricsDisplay({ onSimulate, className }: MetricsDisplayProps) {
   const result = useSimulationStore((s) => s.result);
   const isRunning = useSimulationStore((s) => s.isRunning);
   const nodes = useCanvasStore((s) => s.nodes);
+  const edges = useCanvasStore((s) => s.edges);
   const setSelectedNode = useCanvasStore((s) => s.setSelectedNode);
 
   const componentNodes = useMemo(
@@ -37,8 +39,8 @@ export function MetricsDisplay({ onSimulate, className }: MetricsDisplayProps) {
   );
 
   const bottleneckFixes = useMemo(
-    () => (result ? getBottleneckFixes(componentNodes, result) : []),
-    [componentNodes, result]
+    () => (result ? getBottleneckFixes(componentNodes, result, edges) : []),
+    [componentNodes, result, edges]
   );
 
   const scalableFixCount = bottleneckFixes.filter((f) => f.action === "scale").length;
@@ -85,10 +87,7 @@ export function MetricsDisplay({ onSimulate, className }: MetricsDisplayProps) {
     if (applySingleBottleneckFix(fix)) {
       useAppStore
         .getState()
-        .showToast(
-          `${fix.label}: ${fix.currentReplicas} → ${fix.suggestedReplicas} replicas`,
-          "success"
-        );
+        .showToast(`${fix.label}: ${describeBottleneckScale(fix)}`, "success");
       onSimulate?.();
     }
   };
@@ -136,7 +135,7 @@ export function MetricsDisplay({ onSimulate, className }: MetricsDisplayProps) {
               </p>
               {scalableFixCount > 0 && (
                 <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  {scalableFixCount} can be auto-scaled by adding replicas
+                  {scalableFixCount} can be fixed by adding replicas or shards
                 </p>
               )}
             </div>
@@ -174,7 +173,7 @@ export function MetricsDisplay({ onSimulate, className }: MetricsDisplayProps) {
                       onClick={() => handleFixOne(fix)}
                       className="h-6 shrink-0 gap-1 px-1.5 text-[10px] text-cyan-600 hover:bg-cyan-500/10 dark:text-cyan-400"
                     >
-                      ×{fix.currentReplicas} → ×{fix.suggestedReplicas}
+                      {describeBottleneckScale(fix)}
                     </Button>
                   )}
                 </div>
@@ -182,7 +181,7 @@ export function MetricsDisplay({ onSimulate, className }: MetricsDisplayProps) {
                   {new Intl.NumberFormat("en-US").format(Math.round(fix.incomingQPS))}{" "}
                   req/s incoming
                   {fix.perReplicaQPS !== Infinity &&
-                    ` · ${new Intl.NumberFormat("en-US").format(fix.perReplicaQPS)}/replica`}
+                    ` · ${new Intl.NumberFormat("en-US").format(fix.perReplicaQPS)}/${fix.scaleShards ? "shard" : "replica"}`}
                 </p>
                 {fix.hint && (
                   <p className="mt-1 flex items-start gap-1 text-[10px] text-muted-foreground">

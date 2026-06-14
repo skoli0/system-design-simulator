@@ -8,6 +8,7 @@ import {
   relayoutMyDesign,
 } from "@/lib/addComponentToCanvas";
 import { useCanvasStore, type ComponentNodeData } from "@/store/canvasStore";
+import { edgeDataForComponents } from "@/lib/edgeDefaults";
 
 /** Build reachable node ids from entry points (mirrors scorer logic). */
 function reachableNodeIds(
@@ -202,8 +203,10 @@ function fallbackWiring(
       break;
     }
     case "cache": {
-      const app = pick("app-server");
+      const app = pick("app-server", "api-gateway", "stream-processor");
+      const db = pick("nosql-db", "sql-db", "search");
       if (app) pairs.push({ source: app, target: "cache" });
+      if (db) pairs.push({ source: "cache", target: db });
       break;
     }
     case "load-balancer": {
@@ -222,14 +225,19 @@ function fallbackWiring(
     }
     case "dns": {
       const client = pick("client");
-      const next = pick("cdn", "load-balancer", "api-gateway", "app-server");
+      const cdn = pick("cdn");
       if (client) pairs.push({ source: "client", target: "dns" });
-      if (next) pairs.push({ source: "dns", target: next });
+      if (cdn) pairs.push({ source: "dns", target: "cdn" });
       break;
     }
     case "client": {
-      const next = pick("dns", "cdn", "load-balancer", "api-gateway", "app-server");
-      if (next) pairs.push({ source: "client", target: next });
+      if (has("dns")) pairs.push({ source: "client", target: "dns" });
+      if (has("load-balancer")) pairs.push({ source: "client", target: "load-balancer" });
+      if (has("cdn")) pairs.push({ source: "client", target: "cdn" });
+      const fallback = pick("api-gateway", "app-server");
+      if (fallback && !has("dns") && !has("load-balancer") && !has("cdn")) {
+        pairs.push({ source: "client", target: fallback });
+      }
       break;
     }
     case "app-server": {
@@ -294,11 +302,17 @@ function applyWirePairsForNode(
     if (edgeExists(currentEdges, srcNode.id, tgtNode.id)) continue;
 
     const asyncEdge = isAsyncEdge(srcNode.id, tgtNode.id, componentNodes);
-    addEdgeDirect(srcNode.id, tgtNode.id, {
-      label: "",
-      protocol: asyncEdge ? "pubsub" : "http",
-      async: asyncEdge,
-    });
+    const base = edgeDataForComponents(
+      srcNode.data.componentId,
+      tgtNode.data.componentId,
+    );
+    addEdgeDirect(
+      srcNode.id,
+      tgtNode.id,
+      asyncEdge
+        ? { ...base, label: "", protocol: "pubsub", async: true }
+        : base,
+    );
     created += 1;
   }
   return created;

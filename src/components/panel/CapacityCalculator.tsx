@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { Separator } from "@/components/ui/separator";
 import { Calculator } from "lucide-react";
+import { useCanvasStore } from "@/store/canvasStore";
+import { DEFAULT_CAPACITY_SETTINGS } from "@/lib/designDefaults";
 
 function formatNumber(n: number): string {
   if (n >= 1e12) return `${(n / 1e12).toFixed(2)} T`;
@@ -21,10 +23,17 @@ function formatBytes(bytes: number): string {
 }
 
 export function CapacityCalculator() {
-  const [dau, setDau] = useState(100_000_000);
-  const [reqPerUser, setReqPerUser] = useState(20);
-  const [writeRatio, setWriteRatio] = useState(0.2);
-  const [dataSizeKB, setDataSizeKB] = useState(5);
+  const activeTabId = useCanvasStore((s) => s.activeTabId);
+  const tabs = useCanvasStore((s) => s.tabs);
+  const updateTabCapacity = useCanvasStore((s) => s.updateTabCapacity);
+  const activeTab = tabs.find((t) => t.id === activeTabId);
+  const capacity = activeTab?.capacity ?? DEFAULT_CAPACITY_SETTINGS;
+
+  const { dau, reqPerUser, writeRatio, dataSizeKB } = capacity;
+  const setDau = (v: number) => updateTabCapacity({ dau: v });
+  const setReqPerUser = (v: number) => updateTabCapacity({ reqPerUser: v });
+  const setWriteRatio = (v: number) => updateTabCapacity({ writeRatio: v });
+  const setDataSizeKB = (v: number) => updateTabCapacity({ dataSizeKB: v });
 
   const estimates = useMemo(() => {
     const totalRequests = dau * reqPerUser;

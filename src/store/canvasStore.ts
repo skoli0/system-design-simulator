@@ -10,8 +10,25 @@ import {
   applyEdgeChanges,
   addEdge,
 } from "@xyflow/react";
+import { pickEdgeHandles, normalizeConnection, assignHandlesToEdges } from "@/lib/edgeHandles";
+import { edgeDataForComponents } from "@/lib/edgeDefaults";
+import {
+  snapNodeAlignment,
+  resolveNodePosition,
+  alignNodesForConnection,
+  type AlignmentGuide,
+} from "@/lib/nodeAlignment";
+import {
+  DEFAULT_CAPACITY_SETTINGS,
+  DEFAULT_DESIGN_REQUIREMENTS,
+  type CapacitySettings,
+} from "@/lib/designDefaults";
+import { loadFromProblemRequirements } from "@/lib/loadScale";
 import { useSimulationStore } from "./simulationStore";
+import { useTradeoffStore, type TradeoffEntry } from "./tradeoffStore";
 import { safeLocalStorage } from "./safeStorage";
+import type { ScoreResult } from "@/types/scoring";
+import type { ProblemRequirements } from "@/types/problem";
 
 export interface ComponentNodeData {
   componentId: string;
@@ -19,6 +36,8 @@ export interface ComponentNodeData {
   icon: string;
   category: string;
   replicas: number;
+  /** Horizontal partitions for databases (default 1). Multiplies effective QPS with replicas. */
+  shards?: number;
   maxQPS: number;
   latencyMs: number;
   scalable: boolean;
@@ -35,11 +54,37 @@ export interface TextNodeData {
   [key: string]: unknown;
 }
 
+export type EdgePathStyle = "straight" | "curved" | "elbow";
+
 export interface CustomEdgeData {
   label?: string;
   protocol?: 'http' | 'grpc' | 'websocket' | 'pubsub' | 'tcp' | 'custom';
   async?: boolean;
+  /** Request out + response back on the same hop (e.g. client ↔ DNS/CDN). */
+  bidirectional?: boolean;
+  pathStyle?: EdgePathStyle;
   [key: string]: unknown;
+}
+
+function defaultEdgeData(pathStyle: EdgePathStyle): CustomEdgeData {
+  return { label: "", protocol: "http", async: false, pathStyle };
+}
+
+function edgeDataForNodes(
+  sourceNode: Node | undefined,
+  targetNode: Node | undefined,
+  defaultPathStyle: EdgePathStyle,
+  overrides?: Partial<CustomEdgeData>,
+): CustomEdgeData {
+  if (sourceNode?.type === "component" && targetNode?.type === "component") {
+    return edgeDataForComponents(
+      String(sourceNode.data.componentId),
+      String(targetNode.data.componentId),
+      defaultPathStyle,
+      overrides,
+    );
+  }
+  return { ...defaultEdgeData(defaultPathStyle), ...overrides };
 }
 
 export interface CanvasTab {
@@ -48,6 +93,12 @@ export interface CanvasTab {
   nodes: Node[];
   edges: Edge[];
   readOnly?: boolean;
+  /** Editable design tabs carry their own requirements (My Design uses the selected problem). */
+  requirements?: ProblemRequirements;
+  constraints?: string[];
+  capacity?: CapacitySettings;
+  tradeoffEntries?: TradeoffEntry[];
+  scoreResult?: ScoreResult | null;
 }
 
 interface HistoryEntry {
@@ -103,11 +154,46 @@ function clearScore(): void {
   sim.setShowScore(false);
 }
 
+function syncSimulationFromRequirements(requirements: ProblemRequirements): void {
+  const rps = loadFromProblemRequirements(requirements.readsPerSec);
+  useSimulationStore.getState().setConfig({ requestsPerSec: rps });
+}
+
+/** Persist score + tradeoffs onto the active tab snapshot before switching away. */
+function snapshotActiveTabExtras(
+  tabs: CanvasTab[],
+  activeTabId: string,
+  nodes: Node[],
+  edges: Edge[],
+): CanvasTab[] {
+  const score = useSimulationStore.getState().scoreResult;
+  const tradeoffs = useTradeoffStore.getState().entries;
+  return tabs.map((t) =>
+    t.id === activeTabId
+      ? { ...t, nodes, edges, scoreResult: score, tradeoffEntries: tradeoffs }
+      : t,
+  );
+}
+
+function restoreTabExtras(tab: CanvasTab): void {
+  useSimulationStore.getState().setScoreResult(tab.scoreResult ?? null);
+  useTradeoffStore.getState().replaceEntries(tab.tradeoffEntries ?? []);
+  if (tab.requirements && !tab.readOnly) {
+    syncSimulationFromRequirements(tab.requirements);
+  }
+}
+
+export function isEditableDesignTab(tab: CanvasTab | undefined): boolean {
+  return tab != null && tab.readOnly !== true;
+}
+
 interface CanvasState {
   nodes: Node[];
   edges: Edge[];
   selectedNodeId: string | null;
   selectedEdgeId: string | null;
+  selectedNodeIds: string[];
+  selectedEdgeIds: string[];
 
   // Tab system
   tabs: CanvasTab[];
@@ -116,12 +202,20 @@ interface CanvasState {
   switchTab: (tabId: string) => void;
   closeTab: (tabId: string) => void;
   renameTab: (tabId: string, label: string) => void;
+  createNewDesignTab: (label?: string) => void;
+  updateTabRequirements: (updates: Partial<ProblemRequirements>) => void;
+  updateTabCapacity: (updates: Partial<CapacitySettings>) => void;
+  getActiveTab: () => CanvasTab | undefined;
 
   // Undo/redo (not persisted)
   history: HistoryEntry[];
   future: HistoryEntry[];
   /** Internal: true while a node drag is in progress (dedupes history pushes). */
   isDragging: boolean;
+  alignmentGuides: AlignmentGuide[];
+  /** Default line style for newly created connections. */
+  defaultEdgePathStyle: EdgePathStyle;
+  setDefaultEdgePathStyle: (style: EdgePathStyle) => void;
   undo: () => void;
   redo: () => void;
   canUndo: () => boolean;
@@ -137,8 +231,14 @@ interface CanvasState {
     target: string,
     data?: CustomEdgeData
   ) => void;
+  /** Replace edge A→B with A→inserted→B in one undo step. */
+  spliceNodeIntoEdge: (insertedNodeId: string, edgeId: string) => void;
   setSelectedNode: (id: string | null) => void;
   setSelectedEdge: (id: string | null) => void;
+  setSelection: (nodeIds: string[], edgeIds: string[]) => void;
+  clearSelection: () => void;
+  selectAllNodes: () => void;
+  deleteSelected: () => void;
   updateNodeData: (nodeId: string, data: Partial<ComponentNodeData>) => void;
   updateEdgeData: (edgeId: string, data: Partial<CustomEdgeData>) => void;
   updateAllNodeData: (
@@ -158,45 +258,68 @@ export const useCanvasStore = create<CanvasState>()(
       edges: [],
       selectedNodeId: null,
       selectedEdgeId: null,
+      selectedNodeIds: [],
+      selectedEdgeIds: [],
 
       // Tab system — "my-design" is the default tab
-      tabs: [{ id: "my-design", label: "My Design", nodes: [], edges: [] }],
+      tabs: [
+        {
+          id: "my-design",
+          label: "My Design",
+          nodes: [],
+          edges: [],
+          capacity: { ...DEFAULT_CAPACITY_SETTINGS },
+          tradeoffEntries: [],
+          scoreResult: null,
+        },
+      ],
       activeTabId: "my-design",
 
       history: [],
       future: [],
       isDragging: false,
+      alignmentGuides: [],
+      defaultEdgePathStyle: "straight" as EdgePathStyle,
+
+      setDefaultEdgePathStyle: (style) => set({ defaultEdgePathStyle: style }),
 
       addTab: (tab, options) => {
         const activate = options?.activate !== false;
         set((state) => {
-          // Save current tab state before switching
-          const updatedTabs = state.tabs.map((t) =>
-            t.id === state.activeTabId ? { ...t, nodes: state.nodes, edges: state.edges } : t
+          let updatedTabs = snapshotActiveTabExtras(
+            state.tabs,
+            state.activeTabId,
+            state.nodes,
+            state.edges,
           );
-          // Check if tab already exists (reuse it)
           const existing = updatedTabs.find((t) => t.id === tab.id);
-          const nextTabs = existing
+          updatedTabs = existing
             ? updatedTabs.map((t) => (t.id === tab.id ? { ...t, ...tab } : t))
             : [...updatedTabs, tab];
 
           if (!activate) {
-            return { tabs: nextTabs };
+            return { tabs: updatedTabs };
           }
 
+          const target = updatedTabs.find((t) => t.id === tab.id)!;
+          restoreTabExtras(target);
+          resetSimulation();
+
           return {
-            tabs: nextTabs,
+            tabs: updatedTabs,
             activeTabId: tab.id,
             nodes: tab.nodes,
             edges: tab.edges,
             selectedNodeId: null,
             selectedEdgeId: null,
+            selectedNodeIds: [],
+            selectedEdgeIds: [],
             history: [],
             future: [],
             isDragging: false,
+            alignmentGuides: [],
           };
         });
-        if (activate) resetSimulation();
       },
 
       switchTab: (tabId) => {
@@ -204,20 +327,30 @@ export const useCanvasStore = create<CanvasState>()(
         set((state) => {
           const target = state.tabs.find((t) => t.id === tabId);
           if (!target || tabId === state.activeTabId) return state;
-          // Save current tab state
-          const updatedTabs = state.tabs.map((t) =>
-            t.id === state.activeTabId ? { ...t, nodes: state.nodes, edges: state.edges } : t
+
+          const updatedTabs = snapshotActiveTabExtras(
+            state.tabs,
+            state.activeTabId,
+            state.nodes,
+            state.edges,
           );
+          const refreshedTarget = updatedTabs.find((t) => t.id === tabId)!;
+          restoreTabExtras(refreshedTarget);
+          resetSimulation();
+
           return {
             tabs: updatedTabs,
             activeTabId: tabId,
-            nodes: target.nodes,
-            edges: target.edges,
+            nodes: refreshedTarget.nodes,
+            edges: refreshedTarget.edges,
             selectedNodeId: null,
             selectedEdgeId: null,
+            selectedNodeIds: [],
+            selectedEdgeIds: [],
             history: [],
             future: [],
             isDragging: false,
+            alignmentGuides: [],
           };
         });
         if (get().activeTabId !== before) resetSimulation();
@@ -226,24 +359,45 @@ export const useCanvasStore = create<CanvasState>()(
       closeTab: (tabId) => {
         const before = get().activeTabId;
         set((state) => {
-          if (tabId === "my-design") return state; // Can't close the main tab
-          const remaining = state.tabs.filter((t) => t.id !== tabId);
+          const tab = state.tabs.find((t) => t.id === tabId);
+          if (!tab) return state;
+
+          if (!tab.readOnly) {
+            const editableTabs = state.tabs.filter((t) => !t.readOnly);
+            if (editableTabs.length <= 1) return state;
+          }
+
+          let updatedTabs = snapshotActiveTabExtras(
+            state.tabs,
+            state.activeTabId,
+            state.nodes,
+            state.edges,
+          );
+          updatedTabs = updatedTabs.filter((t) => t.id !== tabId);
+
           if (state.activeTabId === tabId) {
-            // Switch to my-design tab
-            const myDesign = remaining.find((t) => t.id === "my-design") ?? remaining[0];
+            const fallback =
+              updatedTabs.find((t) => t.id === "my-design" && !t.readOnly) ??
+              updatedTabs.find((t) => !t.readOnly) ??
+              updatedTabs[0];
+            restoreTabExtras(fallback);
+            resetSimulation();
             return {
-              tabs: remaining,
-              activeTabId: myDesign.id,
-              nodes: myDesign.nodes,
-              edges: myDesign.edges,
+              tabs: updatedTabs,
+              activeTabId: fallback.id,
+              nodes: fallback.nodes,
+              edges: fallback.edges,
               selectedNodeId: null,
               selectedEdgeId: null,
+              selectedNodeIds: [],
+              selectedEdgeIds: [],
               history: [],
               future: [],
               isDragging: false,
+              alignmentGuides: [],
             };
           }
-          return { tabs: remaining };
+          return { tabs: updatedTabs };
         });
         if (get().activeTabId !== before) resetSimulation();
       },
@@ -253,6 +407,81 @@ export const useCanvasStore = create<CanvasState>()(
           tabs: state.tabs.map((t) => (t.id === tabId ? { ...t, label } : t)),
         }));
       },
+
+      createNewDesignTab: (label) => {
+        const state = get();
+        const designCount = state.tabs.filter((t) => !t.readOnly).length;
+        const id = `design-${crypto.randomUUID().slice(0, 8)}`;
+        const tab: CanvasTab = {
+          id,
+          label: label?.trim() || `Design ${designCount + 1}`,
+          nodes: [],
+          edges: [],
+          requirements: { ...DEFAULT_DESIGN_REQUIREMENTS },
+          constraints: [],
+          capacity: { ...DEFAULT_CAPACITY_SETTINGS },
+          tradeoffEntries: [],
+          scoreResult: null,
+        };
+
+        // Save current tab, then switch to a fresh empty canvas
+        set((s) => {
+          const updatedTabs = snapshotActiveTabExtras(
+            s.tabs,
+            s.activeTabId,
+            s.nodes,
+            s.edges,
+          );
+          return {
+            tabs: [...updatedTabs, tab],
+            activeTabId: tab.id,
+            nodes: [],
+            edges: [],
+            selectedNodeId: null,
+            selectedEdgeId: null,
+            selectedNodeIds: [],
+            selectedEdgeIds: [],
+            history: [],
+            future: [],
+            isDragging: false,
+            alignmentGuides: [],
+          };
+        });
+
+        resetSimulation();
+        clearScore();
+        syncSimulationFromRequirements(tab.requirements!);
+        useTradeoffStore.getState().replaceEntries([]);
+      },
+
+      updateTabRequirements: (updates) => {
+        set((state) => {
+          const tab = state.tabs.find((t) => t.id === state.activeTabId);
+          if (!tab || tab.readOnly || !tab.requirements) return state;
+          const requirements = { ...tab.requirements, ...updates };
+          syncSimulationFromRequirements(requirements);
+          return {
+            tabs: state.tabs.map((t) =>
+              t.id === state.activeTabId ? { ...t, requirements } : t,
+            ),
+          };
+        });
+      },
+
+      updateTabCapacity: (updates) => {
+        set((state) => {
+          const tab = state.tabs.find((t) => t.id === state.activeTabId);
+          if (!tab || tab.readOnly) return state;
+          const capacity = { ...(tab.capacity ?? DEFAULT_CAPACITY_SETTINGS), ...updates };
+          return {
+            tabs: state.tabs.map((t) =>
+              t.id === state.activeTabId ? { ...t, capacity } : t,
+            ),
+          };
+        });
+      },
+
+      getActiveTab: () => get().tabs.find((t) => t.id === get().activeTabId),
 
       undo: () => {
         set((state) => {
@@ -265,7 +494,10 @@ export const useCanvasStore = create<CanvasState>()(
             edges: prev.edges,
             selectedNodeId: null,
             selectedEdgeId: null,
+            selectedNodeIds: [],
+            selectedEdgeIds: [],
             isDragging: false,
+            alignmentGuides: [],
           };
         });
       },
@@ -281,7 +513,10 @@ export const useCanvasStore = create<CanvasState>()(
             edges: next.edges,
             selectedNodeId: null,
             selectedEdgeId: null,
+            selectedNodeIds: [],
+            selectedEdgeIds: [],
             isDragging: false,
+            alignmentGuides: [],
           };
         });
       },
@@ -289,7 +524,7 @@ export const useCanvasStore = create<CanvasState>()(
       canUndo: () => get().history.length > 0,
       canRedo: () => get().future.length > 0,
 
-      clearHistory: () => set({ history: [], future: [], isDragging: false }),
+      clearHistory: () => set({ history: [], future: [], isDragging: false, alignmentGuides: [] }),
 
       onNodesChange: (changes) => {
         set((state) => {
@@ -303,15 +538,45 @@ export const useCanvasStore = create<CanvasState>()(
 
           let history = state.history;
           let future = state.future;
-          // Push pre-change state once at drag start (NOT on every drag
-          // tick) so undo restores the pre-drag positions; also on removal.
           if ((dragStart && !state.isDragging) || hasRemove) {
             history = pushedHistory(state);
             future = [];
           }
 
+          let nodes = applyNodeChanges(changes, state.nodes) as Node[];
+          let alignmentGuides = state.alignmentGuides;
+          let edges = state.edges;
+
+          const activeDrag = changes.find(
+            (c) => c.type === "position" && c.dragging === true,
+          );
+          if (activeDrag && activeDrag.type === "position") {
+            const dragged = nodes.find((n) => n.id === activeDrag.id);
+            if (dragged?.type === "component") {
+              const { position, guides } = snapNodeAlignment(dragged, nodes);
+              nodes = nodes.map((n) =>
+                n.id === dragged.id ? { ...n, position } : n,
+              );
+              alignmentGuides = guides;
+            }
+          }
+
+          if (dragEnd) {
+            alignmentGuides = [];
+            const movedIds = changes
+              .filter((c) => c.type === "position")
+              .map((c) => c.id);
+            nodes = nodes.map((n) => {
+              if (!movedIds.includes(n.id) || n.type !== "component") return n;
+              return { ...n, position: resolveNodePosition(n, nodes) };
+            });
+            edges = assignHandlesToEdges(nodes, state.edges);
+          }
+
           return {
-            nodes: applyNodeChanges(changes, state.nodes) as Node[],
+            nodes,
+            edges,
+            alignmentGuides,
             history,
             future,
             isDragging: dragStart ? true : dragEnd ? false : state.isDragging,
@@ -330,48 +595,226 @@ export const useCanvasStore = create<CanvasState>()(
         });
       },
       onConnect: (connection) => {
-        set((state) => ({
-          history: pushedHistory(state),
-          future: [],
-          edges: addEdge(
-            { ...connection, type: "animated", data: { label: '', protocol: 'http', async: false } satisfies CustomEdgeData },
-            state.edges
-          ),
-        }));
+        set((state) => {
+          const normalized = normalizeConnection(connection, state.nodes);
+          if (!normalized.source || !normalized.target) return state;
+
+          let nodes = alignNodesForConnection(
+            normalized.source,
+            normalized.target,
+            state.nodes,
+          );
+          const sourceNode = nodes.find((n) => n.id === normalized.source);
+          const targetNode = nodes.find((n) => n.id === normalized.target);
+          const edges = assignHandlesToEdges(
+            nodes,
+            addEdge(
+              {
+                ...normalized,
+                type: "animated",
+                data: edgeDataForNodes(sourceNode, targetNode, state.defaultEdgePathStyle),
+              },
+              state.edges,
+            ),
+          );
+
+          return {
+            history: pushedHistory(state),
+            future: [],
+            nodes,
+            edges,
+          };
+        });
       },
       addNode: (node) => {
-        set((state) => ({
-          history: pushedHistory(state),
-          future: [],
-          nodes: [...state.nodes, node],
-        }));
+        set((state) => {
+          const position = resolveNodePosition(node, state.nodes);
+          const alignedNode = { ...node, position };
+          return {
+            history: pushedHistory(state),
+            future: [],
+            nodes: [...state.nodes, alignedNode],
+          };
+        });
       },
       addEdgeDirect: (source, target, data) => {
         set((state) => {
           if (state.edges.some((e) => e.source === source && e.target === target)) {
             return state;
           }
-          return {
-            history: pushedHistory(state),
-            future: [],
-            edges: addEdge(
+          let nodes = alignNodesForConnection(source, target, state.nodes);
+          const sourceNode = nodes.find((n) => n.id === source);
+          const targetNode = nodes.find((n) => n.id === target);
+          const handles =
+            sourceNode && targetNode
+              ? pickEdgeHandles(sourceNode.position, targetNode.position)
+              : {};
+          const edgeData =
+            data ??
+            edgeDataForNodes(sourceNode, targetNode, state.defaultEdgePathStyle);
+          const edges = assignHandlesToEdges(
+            nodes,
+            addEdge(
               {
                 id: `e-${source}-${target}-${crypto.randomUUID().slice(0, 6)}`,
                 source,
                 target,
+                ...handles,
                 type: "animated",
-                data: data ?? { label: "", protocol: "http", async: false },
+                data: edgeData,
               },
-              state.edges
+              state.edges,
             ),
+          );
+          return {
+            history: pushedHistory(state),
+            future: [],
+            nodes,
+            edges,
+          };
+        });
+      },
+      spliceNodeIntoEdge: (insertedNodeId, edgeId) => {
+        set((state) => {
+          const edge = state.edges.find((e) => e.id === edgeId);
+          if (!edge || edge.source === insertedNodeId || edge.target === insertedNodeId) {
+            return state;
+          }
+
+          const edgeData = (edge.data as CustomEdgeData | undefined) ?? defaultEdgeData(state.defaultEdgePathStyle);
+          const inheritedPathStyle = edgeData.pathStyle ?? state.defaultEdgePathStyle;
+
+          let nodes = alignNodesForConnection(edge.source, insertedNodeId, state.nodes);
+          nodes = alignNodesForConnection(insertedNodeId, edge.target, nodes);
+
+          const without = state.edges.filter((e) => e.id !== edgeId);
+          const inserted = nodes.find((n) => n.id === insertedNodeId);
+          const sourceNode = nodes.find((n) => n.id === edge.source);
+          const targetNode = nodes.find((n) => n.id === edge.target);
+          if (!inserted || !sourceNode || !targetNode) return state;
+
+          const handlesIn = pickEdgeHandles(sourceNode.position, inserted.position);
+          const handlesOut = pickEdgeHandles(inserted.position, targetNode.position);
+
+          const idSuffix = crypto.randomUUID().slice(0, 6);
+          let edges = addEdge(
+            {
+              id: `e-${edge.source}-${insertedNodeId}-${idSuffix}`,
+              source: edge.source,
+              target: insertedNodeId,
+              ...handlesIn,
+              type: "animated",
+              data: edgeDataForNodes(sourceNode, inserted, inheritedPathStyle),
+            },
+            without,
+          );
+          edges = addEdge(
+            {
+              id: `e-${insertedNodeId}-${edge.target}-${idSuffix}`,
+              source: insertedNodeId,
+              target: edge.target,
+              ...handlesOut,
+              type: "animated",
+              data: edgeDataForNodes(inserted, targetNode, inheritedPathStyle),
+            },
+            edges,
+          );
+          edges = assignHandlesToEdges(nodes, edges);
+
+          return {
+            history: pushedHistory(state),
+            future: [],
+            nodes,
+            edges,
           };
         });
       },
       setSelectedNode: (id) => {
-        set({ selectedNodeId: id, selectedEdgeId: null });
+        set({
+          selectedNodeId: id,
+          selectedEdgeId: null,
+          selectedNodeIds: id ? [id] : [],
+          selectedEdgeIds: [],
+        });
       },
       setSelectedEdge: (id) => {
-        set({ selectedEdgeId: id, selectedNodeId: null });
+        set({
+          selectedEdgeId: id,
+          selectedNodeId: null,
+          selectedNodeIds: [],
+          selectedEdgeIds: id ? [id] : [],
+        });
+      },
+      setSelection: (nodeIds, edgeIds) => {
+        set({
+          selectedNodeIds: nodeIds,
+          selectedEdgeIds: edgeIds,
+          selectedNodeId: nodeIds[0] ?? null,
+          selectedEdgeId: edgeIds[0] ?? null,
+        });
+      },
+      clearSelection: () => {
+        set((state) => ({
+          selectedNodeId: null,
+          selectedEdgeId: null,
+          selectedNodeIds: [],
+          selectedEdgeIds: [],
+          nodes: state.nodes.map((n) => ({ ...n, selected: false })),
+          edges: state.edges.map((e) => ({ ...e, selected: false })),
+        }));
+      },
+      selectAllNodes: () => {
+        set((state) => {
+          const ids = state.nodes.map((n) => n.id);
+          return {
+            nodes: state.nodes.map((n) => ({ ...n, selected: true })),
+            edges: state.edges.map((e) => ({ ...e, selected: false })),
+            selectedNodeIds: ids,
+            selectedEdgeIds: [],
+            selectedNodeId: ids[0] ?? null,
+            selectedEdgeId: null,
+          };
+        });
+      },
+      deleteSelected: () => {
+        set((state) => {
+          const nodeIds = new Set(
+            state.selectedNodeIds.length > 0
+              ? state.selectedNodeIds
+              : state.selectedNodeId
+                ? [state.selectedNodeId]
+                : [],
+          );
+          const edgeIds = new Set(
+            state.selectedEdgeIds.length > 0
+              ? state.selectedEdgeIds
+              : state.selectedEdgeId
+                ? [state.selectedEdgeId]
+                : [],
+          );
+          if (nodeIds.size === 0 && edgeIds.size === 0) return state;
+
+          const nextNodes = state.nodes.filter((n) => !nodeIds.has(n.id));
+          const nextEdges = state.edges.filter(
+            (e) =>
+              !edgeIds.has(e.id) &&
+              !nodeIds.has(e.source) &&
+              !nodeIds.has(e.target),
+          );
+
+          return {
+            history: pushedHistory(state),
+            future: [],
+            nodes: nextNodes,
+            edges: nextEdges,
+            selectedNodeId: null,
+            selectedEdgeId: null,
+            selectedNodeIds: [],
+            selectedEdgeIds: [],
+          };
+        });
+        resetSimulation();
+        clearScore();
       },
       updateNodeData: (nodeId, data) => {
         set((state) => ({
@@ -403,6 +846,8 @@ export const useCanvasStore = create<CanvasState>()(
           edges: [],
           selectedNodeId: null,
           selectedEdgeId: null,
+          selectedNodeIds: [],
+          selectedEdgeIds: [],
         }));
         resetSimulation();
         clearScore();
@@ -424,7 +869,19 @@ export const useCanvasStore = create<CanvasState>()(
           )
             ? null
             : state.selectedEdgeId,
+          selectedNodeIds: state.selectedNodeIds.filter((id) => id !== nodeId),
+          selectedEdgeIds:
+            state.selectedEdgeId &&
+            state.edges.some(
+              (e) =>
+                e.id === state.selectedEdgeId &&
+                (e.source === nodeId || e.target === nodeId)
+            )
+              ? []
+              : state.selectedEdgeIds,
         }));
+        resetSimulation();
+        clearScore();
       },
       deleteEdge: (edgeId) => {
         set((state) => ({
@@ -460,6 +917,8 @@ export const useCanvasStore = create<CanvasState>()(
             edges,
             selectedNodeId: null,
             selectedEdgeId: null,
+            selectedNodeIds: [],
+            selectedEdgeIds: [],
             history:
               state.activeTabId === "my-design" ? pushedHistory(state) : [],
             future: [],
@@ -479,28 +938,35 @@ export const useCanvasStore = create<CanvasState>()(
       partialize: (state) => ({
         nodes: stripRuntimeFields(state.nodes),
         edges: state.edges,
-        // The active tab's content already lives in the top-level
-        // nodes/edges — persist it emptied to avoid duplicating it, and
-        // reconstruct it in `merge` on rehydrate.
         tabs: state.tabs.map((t) =>
           t.id === state.activeTabId
-            ? { ...t, nodes: [], edges: [] }
+            ? {
+                ...t,
+                nodes: [],
+                edges: [],
+                scoreResult: useSimulationStore.getState().scoreResult,
+                tradeoffEntries: useTradeoffStore.getState().entries,
+              }
             : { ...t, nodes: stripRuntimeFields(t.nodes) }
         ),
         activeTabId: state.activeTabId,
+        defaultEdgePathStyle: state.defaultEdgePathStyle,
       }),
       merge: (persistedState, currentState) => {
         const persisted = (persistedState ?? {}) as Partial<
-          Pick<CanvasState, "nodes" | "edges" | "tabs" | "activeTabId">
+          Pick<CanvasState, "nodes" | "edges" | "tabs" | "activeTabId" | "defaultEdgePathStyle">
         >;
         const merged: CanvasState = { ...currentState, ...persisted };
-        // Refill the active tab's snapshot from the live nodes/edges.
         if (merged.tabs && merged.tabs.length > 0) {
-          merged.tabs = merged.tabs.map((t) =>
-            t.id === merged.activeTabId
-              ? { ...t, nodes: merged.nodes, edges: merged.edges }
-              : t
-          );
+          merged.tabs = merged.tabs.map((t) => ({
+            ...t,
+            capacity: t.capacity ?? { ...DEFAULT_CAPACITY_SETTINGS },
+            tradeoffEntries: t.tradeoffEntries ?? [],
+            scoreResult: t.scoreResult ?? null,
+            ...(t.id === merged.activeTabId
+              ? { nodes: merged.nodes, edges: merged.edges }
+              : {}),
+          }));
         } else {
           merged.tabs = [
             {
@@ -508,9 +974,19 @@ export const useCanvasStore = create<CanvasState>()(
               label: "My Design",
               nodes: merged.nodes,
               edges: merged.edges,
+              capacity: { ...DEFAULT_CAPACITY_SETTINGS },
+              tradeoffEntries: [],
+              scoreResult: null,
             },
           ];
           merged.activeTabId = "my-design";
+        }
+        merged.selectedNodeIds = merged.selectedNodeIds ?? [];
+        merged.selectedEdgeIds = merged.selectedEdgeIds ?? [];
+        merged.alignmentGuides = merged.alignmentGuides ?? [];
+        const activeTab = merged.tabs.find((t) => t.id === merged.activeTabId);
+        if (activeTab) {
+          restoreTabExtras(activeTab);
         }
         return merged;
       },

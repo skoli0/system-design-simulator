@@ -11,6 +11,7 @@ import {
   useUpdateNodeInternals,
   type Node,
   type Edge,
+  type OnSelectionChangeParams,
 } from "@xyflow/react";
 import {
   CANVAS_FIT_VIEW_OPTIONS,
@@ -25,6 +26,7 @@ import { usePenStore } from "@/store/penStore";
 import { useAppStore } from "@/store/appStore";
 import { useSimulationStore } from "@/store/simulationStore";
 import { getComponentById } from "@/data/components";
+import { wireDroppedNode } from "@/lib/insertNodeOnEdge";
 import { BookOpen, GraduationCap, Layers, Lock, MousePointer2, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -41,6 +43,9 @@ const emptyItem = {
 import { CanvasTabBar } from "./CanvasTabBar";
 import { PenOverlay } from "./PenOverlay";
 import { PenToolbar } from "./PenToolbar";
+import { SelectionToolbar } from "./SelectionToolbar";
+import { AlignmentGuides } from "./AlignmentGuides";
+import { isEditableDesignTab } from "@/store/canvasStore";
 
 interface DesignCanvasProps {
   onPickProblem?: () => void;
@@ -60,13 +65,16 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
   const onNodesChange = useCanvasStore((s) => s.onNodesChange);
   const onEdgesChange = useCanvasStore((s) => s.onEdgesChange);
   const onConnect = useCanvasStore((s) => s.onConnect);
+  const alignmentGuides = useCanvasStore((s) => s.alignmentGuides);
   const addNode = useCanvasStore((s) => s.addNode);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
-  const setSelectedNode = useCanvasStore((s) => s.setSelectedNode);
-  const setSelectedEdge = useCanvasStore((s) => s.setSelectedEdge);
+  const setSelection = useCanvasStore((s) => s.setSelection);
+  const clearSelection = useCanvasStore((s) => s.clearSelection);
   const tabs = useCanvasStore((s) => s.tabs);
   const activeTabId = useCanvasStore((s) => s.activeTabId);
-  const isReadOnly = tabs.find((t) => t.id === activeTabId)?.readOnly === true;
+  const activeTab = tabs.find((t) => t.id === activeTabId);
+  const isReadOnly = activeTab?.readOnly === true;
+  const isEditable = isEditableDesignTab(activeTab);
   const penMode = usePenStore((s) => s.mode);
   const penActive = penMode !== "off";
   const theme = useAppStore((s) => s.theme);
@@ -136,20 +144,15 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
     scheduleFitView(CANVAS_LAYOUT_SETTLE_MS + 80);
   }, [hasHydrated, nodes.length, scheduleFitView]);
 
-  // Re-fit the viewport when switching tabs or when nodes are loaded programmatically
+  // Re-fit the viewport when switching tabs
   const initialTabRef = useRef(true);
   useEffect(() => {
     if (initialTabRef.current) {
       initialTabRef.current = false;
-      return; // initial mount already handled by the `fitView` prop
+      return;
     }
     scheduleFitView(0);
   }, [activeTabId, scheduleFitView]);
-
-  useEffect(() => {
-    if (nodes.length === 0) return;
-    scheduleFitView(0);
-  }, [nodes.length, scheduleFitView]);
 
   useEffect(() => {
     function handleFitView() {
@@ -202,6 +205,7 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
           icon: component.icon,
           category: component.category,
           replicas: 1,
+          shards: 1,
           maxQPS: component.maxQPS,
           latencyMs: component.latencyMs,
           scalable: component.scalable,
@@ -209,28 +213,24 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
       };
 
       addNode(newNode);
+      wireDroppedNode(newNode.id);
     },
     [screenToFlowPosition, addNode, isReadOnly]
   );
 
-  const onNodeClick = useCallback(
-    (_: React.MouseEvent, node: Node) => {
-      setSelectedNode(node.id);
+  const onSelectionChange = useCallback(
+    ({ nodes: selNodes, edges: selEdges }: OnSelectionChangeParams) => {
+      setSelection(
+        selNodes.map((n) => n.id),
+        selEdges.map((e) => e.id),
+      );
     },
-    [setSelectedNode]
-  );
-
-  const onEdgeClick = useCallback(
-    (_: React.MouseEvent, edge: Edge) => {
-      setSelectedEdge(edge.id);
-    },
-    [setSelectedEdge]
+    [setSelection],
   );
 
   const onPaneClick = useCallback(() => {
-    setSelectedNode(null);
-    setSelectedEdge(null);
-  }, [setSelectedNode, setSelectedEdge]);
+    clearSelection();
+  }, [clearSelection]);
 
   const miniMapNodeColor = useMemo(
     () => (node: Node) => {
@@ -244,7 +244,10 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
     []
   );
 
-  const isEmpty = nodes.length === 0;
+  const isEmpty =
+    activeTabId === "my-design" &&
+    isEditable &&
+    nodes.filter((n) => n.type !== "text").length === 0;
 
   return (
     <div ref={reactFlowWrapper} className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -260,16 +263,16 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
         onConnect={isReadOnly ? undefined : onConnect}
         onDrop={onDrop}
         onDragOver={onDragOver}
-        onNodeClick={onNodeClick}
-        onEdgeClick={onEdgeClick}
         onPaneClick={onPaneClick}
+        onSelectionChange={onSelectionChange}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         defaultEdgeOptions={{ type: "animated" }}
-        fitView
-        fitViewOptions={CANVAS_FIT_VIEW_OPTIONS}
         proOptions={{ hideAttribution: true }}
-        panOnDrag={!penActive}
+        selectionOnDrag={!penActive && !isReadOnly}
+        multiSelectionKeyCode="Shift"
+        selectionKeyCode="Shift"
+        panOnDrag={penActive ? false : true}
         zoomOnScroll={!penActive}
         zoomOnPinch={!penActive}
         nodesDraggable={!penActive && !isReadOnly}
@@ -299,6 +302,9 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
 
         <PenOverlay />
         <PenToolbar />
+
+        {!isReadOnly && <AlignmentGuides guides={alignmentGuides} />}
+        {!isReadOnly && <SelectionToolbar />}
 
         {/* Read-only hint for reference tabs */}
         {isReadOnly && (
@@ -333,7 +339,7 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
               </p>
             </motion.div>
 
-            <motion.div variants={emptyItem} className="grid w-full gap-2 sm:grid-cols-3">
+            <motion.div variants={emptyItem} className="grid w-full gap-2 sm:grid-cols-2">
               <QuickStartCard
                 icon={<BookOpen className="h-3.5 w-3.5" />}
                 title="Pick a problem"
@@ -352,6 +358,15 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
                 hint="Timed 6-phase mock"
                 onClick={onStartInterview}
                 accent
+              />
+              <QuickStartCard
+                icon={<Layers className="h-3.5 w-3.5" />}
+                title="New design"
+                hint="Blank canvas with defaults"
+                onClick={() => {
+                  useCanvasStore.getState().createNewDesignTab();
+                  useAppStore.getState().showToast("New design canvas created", "success");
+                }}
               />
             </motion.div>
 

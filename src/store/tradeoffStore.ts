@@ -16,6 +16,7 @@ interface TradeoffState {
   addEntry: (entry: Omit<TradeoffEntry, "id" | "timestamp">) => void;
   removeEntry: (id: string) => void;
   clearEntries: () => void;
+  replaceEntries: (entries: TradeoffEntry[]) => void;
 }
 
 export const useTradeoffStore = create<TradeoffState>()(
@@ -36,6 +37,7 @@ export const useTradeoffStore = create<TradeoffState>()(
       removeEntry: (id) =>
         set((s) => ({ entries: s.entries.filter((e) => e.id !== id) })),
       clearEntries: () => set({ entries: [] }),
+      replaceEntries: (entries) => set({ entries }),
     }),
     {
       name: "systemsim-tradeoffs",

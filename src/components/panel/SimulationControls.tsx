@@ -42,6 +42,7 @@ export function SimulationControls({ onSimulate, onStop }: SimulationControlsPro
   const trafficActive = useSimulationStore((s) => s.trafficActive);
   const result = useSimulationStore((s) => s.result);
   const nodes = useCanvasStore((s) => s.nodes);
+  const edges = useCanvasStore((s) => s.edges);
 
   const simActive = isRunning || trafficActive;
   const hasBottlenecks = (result?.bottleneckNodes.length ?? 0) > 0;
@@ -92,14 +93,14 @@ export function SimulationControls({ onSimulate, onStop }: SimulationControlsPro
     const componentNodes = nodes.filter(
       (n) => n.type !== "text"
     ) as Node<ComponentNodeData>[];
-    const fixes = getBottleneckFixes(componentNodes, result);
+    const fixes = getBottleneckFixes(componentNodes, result, edges);
     const scalableFixes = fixes.filter((f) => f.action === "scale");
 
     if (scalableFixes.length === 0) {
       useAppStore
         .getState()
         .showToast(
-          "No auto-scalable bottlenecks — see hints in metrics below",
+          "No auto-scalable bottlenecks — add cache, shards, or see hints below",
           "info"
         );
       return;
@@ -223,7 +224,9 @@ export function SimulationControls({ onSimulate, onStop }: SimulationControlsPro
       {simActive && !isRunning && (
         <p className="text-[11px] leading-relaxed text-muted-foreground">
           Traffic animation is active on the canvas. Adjust the slider to see load
-          and bottlenecks update live.
+          update live — over-provisioned replicas scale down automatically; use{" "}
+          <span className="text-amber-600 dark:text-amber-400">Scale bottlenecks</span>{" "}
+          to add capacity.
         </p>
       )}
 

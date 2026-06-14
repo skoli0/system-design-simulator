@@ -1,5 +1,6 @@
 import type { Node } from "@xyflow/react";
 import { runSimulation } from "@/engine/simulator";
+import { autoScaleToLoad } from "@/engine/bottleneckFix";
 import { useCanvasStore, type ComponentNodeData } from "@/store/canvasStore";
 import { useSimulationStore } from "@/store/simulationStore";
 import { useAppStore } from "@/store/appStore";
@@ -111,10 +112,15 @@ export function runSimulationWithAnimation(
   if (options?.instant) {
     sim.setRunning(false);
     sim.setTrafficActive(true);
-    sim.setResult(result);
-    applyMetricsToCanvas(result);
+    let finalResult = result;
+    const auto = autoScaleToLoad(componentNodes, edges, config.requestsPerSec, result);
+    if (auto.scaledDown > 0) {
+      finalResult = auto.result;
+    }
+    sim.setResult(finalResult);
+    applyMetricsToCanvas(finalResult);
     if (!options.silent) {
-      const bottleneckCount = result.bottleneckNodes.length;
+      const bottleneckCount = finalResult.bottleneckNodes.length;
       if (bottleneckCount > 0) {
         useAppStore
           .getState()
@@ -157,12 +163,25 @@ export function runSimulationWithAnimation(
       sim.setResult(result);
       sim.setRunning(false);
       sim.setTrafficActive(true);
-      applyMetricsToCanvas(result);
+      let finalResult = result;
+      const auto = autoScaleToLoad(componentNodes, edges, config.requestsPerSec, result);
+      if (auto.scaledDown > 0) {
+        finalResult = auto.result;
+      }
+      sim.setResult(finalResult);
+      applyMetricsToCanvas(finalResult);
 
-      const bottleneckCount = result.bottleneckNodes.length;
+      const bottleneckCount = finalResult.bottleneckNodes.length;
       const fromTopBar = options?.source === "topbar";
 
-      if (bottleneckCount > 0) {
+      if (auto.scaledDown > 0 && bottleneckCount === 0) {
+        useAppStore
+          .getState()
+          .showToast(
+            `Simulation complete — scaled down ${auto.scaledDown} over-provisioned component${auto.scaledDown > 1 ? "s" : ""}`,
+            "success"
+          );
+      } else if (bottleneckCount > 0) {
         if (fromTopBar) {
           options?.onBottlenecks?.();
           useAppStore
@@ -209,7 +228,12 @@ export function rerunSimulationAtCurrentLoad(options?: { silent?: boolean }): bo
   }
 
   const sim = useSimulationStore.getState();
-  const nextResult = runSimulation(componentNodes, edges, config.requestsPerSec);
+  let nextResult = runSimulation(componentNodes, edges, config.requestsPerSec);
+
+  const auto = autoScaleToLoad(componentNodes, edges, config.requestsPerSec, nextResult);
+  if (auto.scaledDown > 0) {
+    nextResult = auto.result;
+  }
 
   sim.setRunning(false);
   sim.setTrafficActive(true);
@@ -218,7 +242,14 @@ export function rerunSimulationAtCurrentLoad(options?: { silent?: boolean }): bo
 
   if (!options?.silent && !isRunning) {
     const bottleneckCount = nextResult.bottleneckNodes.length;
-    if (bottleneckCount > 0) {
+    if (auto.scaledDown > 0) {
+      useAppStore
+        .getState()
+        .showToast(
+          `Load manageable — scaled down ${auto.scaledDown} component${auto.scaledDown > 1 ? "s" : ""}`,
+          "info"
+        );
+    } else if (bottleneckCount > 0) {
       useAppStore
         .getState()
         .showToast(

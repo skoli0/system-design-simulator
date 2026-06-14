@@ -79,6 +79,7 @@ export function TopBar({ onSimulate, onStopSimulation, onClearCanvas, onSave, on
     customProblems.find((p) => p.id === selectedProblemId);
 
   const addTextNote = useCallback(() => {
+    if (activeTabReadOnly) return;
     // Center of the visible canvas (not the window — sidebars offset it)
     const wrapper = document.querySelector(".react-flow");
     const rect = wrapper?.getBoundingClientRect();
@@ -95,7 +96,7 @@ export function TopBar({ onSimulate, onStopSimulation, onClearCanvas, onSave, on
       connectable: false,
     };
     addNode(newNode);
-  }, [screenToFlowPosition, addNode]);
+  }, [screenToFlowPosition, addNode, activeTabReadOnly]);
 
   const handleExportPng = useCallback(async () => {
     setExportOpen(false);
@@ -494,8 +495,12 @@ export function TopBar({ onSimulate, onStopSimulation, onClearCanvas, onSave, on
         <div className="hidden h-4 w-px bg-muted md:block" />
 
         <button
-          onClick={() => setClearConfirmOpen(true)}
-          className="hidden h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-rose-400 md:flex"
+          onClick={() => {
+            if (activeTabReadOnly) return;
+            setClearConfirmOpen(true);
+          }}
+          disabled={activeTabReadOnly}
+          className="hidden h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-rose-400 disabled:pointer-events-none disabled:opacity-40 md:flex"
           title="Clear canvas"
           aria-label="Clear canvas"
         >

@@ -11,6 +11,7 @@ import { useCanvasStore, type ComponentNodeData, type CustomEdgeData } from "@/s
 import { useAppStore } from "@/store/appStore";
 import { getProblemById } from "@/data/problems";
 import { getConceptByComponentId } from "@/data/conceptLibrary";
+import { getEffectiveCapacity, supportsDbScaling, sanitizeShards } from "@/engine/dbScaling";
 import { SimulationControls } from "./SimulationControls";
 import { MetricsDisplay } from "./MetricsDisplay";
 import { ScoreReport } from "./ScoreReport";
@@ -214,6 +215,9 @@ function EdgePropertiesPanel() {
           <p className="mt-1 text-[11px] text-muted-foreground">
             {data.async ? "Dashed line — asynchronous (e.g. message queue)" : "Solid line — synchronous (e.g. HTTP call)"}
           </p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Line style (Straight / Curved / Elbow) appears on the connection when selected.
+          </p>
         </div>
 
         {/* Remove connection — clears selection via the store */}
@@ -233,21 +237,76 @@ function EdgePropertiesPanel() {
 
 function PropertiesTab() {
   const selectedNodeId = useCanvasStore((s) => s.selectedNodeId);
+  const selectedNodeIds = useCanvasStore((s) => s.selectedNodeIds);
   const selectedEdgeId = useCanvasStore((s) => s.selectedEdgeId);
   const nodes = useCanvasStore((s) => s.nodes);
+  const activeTabId = useCanvasStore((s) => s.activeTabId);
+  const tabs = useCanvasStore((s) => s.tabs);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const deleteNode = useCanvasStore((s) => s.deleteNode);
+  const deleteSelected = useCanvasStore((s) => s.deleteSelected);
+  const updateTabRequirements = useCanvasStore((s) => s.updateTabRequirements);
   const selectedProblemId = useAppStore((s) => s.selectedProblemId);
+
+  const activeTab = tabs.find((t) => t.id === activeTabId);
+  const tabRequirements = activeTab?.requirements;
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) as
     | (typeof nodes[number] & { data: ComponentNodeData })
     | undefined;
   const problem = getProblemById(selectedProblemId);
 
+  const inputClass =
+    "w-full rounded-md border border-border bg-muted px-2.5 py-1.5 font-mono text-xs text-foreground outline-none focus:border-cyan-500";
+
   return (
     <div className="space-y-4">
-      {/* Problem requirements */}
-      {problem && (
+      {/* Tab-specific editable requirements (new design canvases) */}
+      {tabRequirements && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Requirements — {activeTab?.label}
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <RequirementField
+              label="Reads/sec"
+              value={tabRequirements.readsPerSec}
+              onChange={(v) => updateTabRequirements({ readsPerSec: v })}
+              inputClass={inputClass}
+            />
+            <RequirementField
+              label="Writes/sec"
+              value={tabRequirements.writesPerSec}
+              onChange={(v) => updateTabRequirements({ writesPerSec: v })}
+              inputClass={inputClass}
+            />
+            <RequirementField
+              label="Storage (GB)"
+              value={tabRequirements.storageGB}
+              onChange={(v) => updateTabRequirements({ storageGB: v })}
+              inputClass={inputClass}
+            />
+            <RequirementField
+              label="Latency SLA (ms)"
+              value={tabRequirements.latencyMs}
+              onChange={(v) => updateTabRequirements({ latencyMs: v })}
+              inputClass={inputClass}
+            />
+            <div className="col-span-2">
+              <label className="mb-0.5 block text-[11px] text-muted-foreground">Users</label>
+              <input
+                type="text"
+                value={tabRequirements.users}
+                onChange={(e) => updateTabRequirements({ users: e.target.value })}
+                className={inputClass}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Problem requirements (My Design + selected problem) */}
+      {!tabRequirements && problem && (
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Requirements — {problem.title}
@@ -273,7 +332,7 @@ function PropertiesTab() {
       )}
 
       {/* Constraints */}
-      {problem && problem.constraints.length > 0 && (
+      {!tabRequirements && problem && problem.constraints.length > 0 && (
         <>
           <Separator className="bg-muted" />
           <ConstraintsSection constraints={problem.constraints} />
@@ -281,7 +340,7 @@ function PropertiesTab() {
       )}
 
       {/* Hints */}
-      {problem && problem.hints.length > 0 && (
+      {!tabRequirements && problem && problem.hints.length > 0 && (
         <>
           <Separator className="bg-muted" />
           <HintsSection hints={problem.hints} />
@@ -290,8 +349,31 @@ function PropertiesTab() {
 
       <Separator className="bg-muted" />
 
-      {/* Selected node properties */}
-      {selectedNode && selectedNode.type === "text" ? (
+      {/* Multi-select */}
+      {selectedNodeIds.length > 1 ? (
+        <div className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Selection
+          </p>
+          <div className="rounded-md bg-muted px-3 py-2">
+            <p className="text-xs font-medium text-foreground">
+              {selectedNodeIds.length} components selected
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Shift+click to add · drag to box-select · ⌘A to select all
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={deleteSelected}
+            className="w-full gap-1.5 border-border text-rose-400 hover:bg-muted hover:text-rose-300"
+          >
+            <Trash2 className="h-3 w-3" />
+            Remove {selectedNodeIds.length} Components
+          </Button>
+        </div>
+      ) : selectedNode && selectedNode.type === "text" ? (
         <div className="space-y-3">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Text Annotation
@@ -332,6 +414,9 @@ function PropertiesTab() {
       ) : selectedNode ? (
         (() => {
           const data = selectedNode.data as ComponentNodeData;
+          const shards = sanitizeShards(data.shards);
+          const dbScaling = supportsDbScaling(data.componentId);
+          const effectiveCapacity = getEffectiveCapacity({ ...data, shards });
           return (
         <div className="space-y-3">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -345,13 +430,15 @@ function PropertiesTab() {
               </p>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {data.category as string} · Max {(data.maxQPS as number) === Infinity ? "\u221e" : new Intl.NumberFormat("en-US").format(data.maxQPS as number)} QPS
+                {dbScaling ? " per shard" : " per replica"}
               </p>
             </div>
 
-            {/* Replicas slider \u2014 shown for every component node */}
             <div>
               <div className="mb-1.5 flex items-center justify-between">
-                <label className="text-xs text-muted-foreground">Replicas</label>
+                <label className="text-xs text-muted-foreground">
+                  {dbScaling && !data.scalable ? "Read replicas" : "Replicas"}
+                </label>
                 <span className="font-mono text-xs text-cyan-500">
                   {data.replicas as number}
                 </span>
@@ -367,10 +454,42 @@ function PropertiesTab() {
                 step={1}
                 className=""
               />
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Effective capacity: {(data.maxQPS as number) === Infinity ? "\u221e" : new Intl.NumberFormat("en-US").format((data.maxQPS as number) * (data.replicas as number))} QPS
-              </p>
             </div>
+
+            {dbScaling && (
+              <div>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <label className="text-xs text-muted-foreground">Shards</label>
+                  <span className="font-mono text-xs text-cyan-500">{shards}</span>
+                </div>
+                <Slider
+                  aria-label="Shards"
+                  value={[shards]}
+                  onValueChange={(v) =>
+                    updateNodeData(selectedNode.id, {
+                      shards: Array.isArray(v) ? v[0] : v,
+                    })
+                  }
+                  min={1}
+                  max={32}
+                  step={1}
+                />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Partitions data across independent database nodes to spread read/write load.
+                </p>
+              </div>
+            )}
+
+            <p className="text-[11px] text-muted-foreground">
+              Effective capacity:{" "}
+              {(data.maxQPS as number) === Infinity
+                ? "\u221e"
+                : new Intl.NumberFormat("en-US").format(effectiveCapacity)}{" "}
+              QPS
+              {dbScaling && shards * (data.replicas as number) > 1
+                ? ` (${data.replicas} replica${(data.replicas as number) > 1 ? "s" : ""} × ${shards} shard${shards > 1 ? "s" : ""})`
+                : ""}
+            </p>
 
             {/* Info */}
             <div className="space-y-1">
@@ -416,11 +535,35 @@ function PropertiesTab() {
               No component selected
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Click a component or edge on the canvas to edit its properties.
+              Click a component or edge on the canvas to edit. Shift+click or drag to select multiple.
             </p>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function RequirementField({
+  label,
+  value,
+  onChange,
+  inputClass,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  inputClass: string;
+}) {
+  return (
+    <div>
+      <label className="mb-0.5 block text-[11px] text-muted-foreground">{label}</label>
+      <input
+        type="number"
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value) || 0)}
+        className={inputClass}
+      />
     </div>
   );
 }

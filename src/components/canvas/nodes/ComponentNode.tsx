@@ -8,6 +8,7 @@ import { useCanvasStore } from "@/store/canvasStore";
 import { useSimulationStore } from "@/store/simulationStore";
 import { Server } from "lucide-react";
 import { ICON_MAP } from "@/lib/icons";
+import { sanitizeShards, supportsDbScaling } from "@/engine/dbScaling";
 import { useIsCoarsePointer } from "@/hooks/useBreakpoint";
 
 type ComponentNode = Node<ComponentNodeData, "component">;
@@ -39,6 +40,8 @@ function ComponentNodeInner({ id, data, selected }: NodeProps<ComponentNode>) {
   const statusDot = STATUS_DOT[status] ?? STATUS_DOT.idle;
   const isBottleneck = nodeData.isBottleneck ?? false;
   const replicas = nodeData.replicas ?? 1;
+  const shards = sanitizeShards(nodeData.shards);
+  const showDbScaling = supportsDbScaling(nodeData.componentId);
   const utilization = nodeData.utilization ?? 0;
   const trafficActive = useSimulationStore((s) => s.trafficActive);
   const isSimulating = useSimulationStore((s) => s.isRunning);
@@ -61,7 +64,7 @@ function ComponentNodeInner({ id, data, selected }: NodeProps<ComponentNode>) {
   // Keep handle positions in sync when simulation metrics change node height.
   useEffect(() => {
     updateNodeInternals(id);
-  }, [id, utilization, status, isBottleneck, replicas, updateNodeInternals]);
+  }, [id, utilization, status, isBottleneck, replicas, shards, updateNodeInternals]);
 
   const commitLabel = useCallback(() => {
     const trimmed = editLabel.trim();
@@ -143,10 +146,15 @@ function ComponentNodeInner({ id, data, selected }: NodeProps<ComponentNode>) {
         {nodeData.maxQPS === Infinity ? '\u221e' : ((nodeData.maxQPS ?? 0)/1000).toFixed(0) + 'k'} qps
       </span>
 
-      {/* Replicas badge */}
+      {/* Capacity badges */}
       {replicas > 1 && (
         <span className="absolute -left-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-cyan-600 px-1 text-[8px] font-bold text-white">
           ×{replicas}
+        </span>
+      )}
+      {showDbScaling && shards > 1 && (
+        <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-600 px-1 text-[8px] font-bold text-white">
+          S{shards}
         </span>
       )}
 
@@ -171,19 +179,22 @@ function ComponentNodeInner({ id, data, selected }: NodeProps<ComponentNode>) {
         ) : null}
       </div>
 
-      {/* Handles — larger visual size on touch devices (44px hit area via CSS ::after) */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="left"
-        className={`${isCoarse ? "!h-5 !w-5" : "!h-2 !w-2"} !rounded-full !border !border-border !bg-muted-foreground`}
-      />
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="right"
-        className={`${isCoarse ? "!h-5 !w-5" : "!h-2 !w-2"} !rounded-full !border !border-border !bg-muted-foreground`}
-      />
+      {/* Handles — all four sides; larger hit area on touch devices */}
+      {(() => {
+        const handleClass = `${isCoarse ? "!h-5 !w-5" : "!h-2 !w-2"} !rounded-full !border !border-border !bg-muted-foreground`;
+        return (
+          <>
+            <Handle type="target" position={Position.Left} id="left" className={handleClass} />
+            <Handle type="source" position={Position.Right} id="right" className={handleClass} />
+            <Handle type="target" position={Position.Top} id="top" className={handleClass} />
+            <Handle type="source" position={Position.Top} id="top-source" className={handleClass} />
+            <Handle type="source" position={Position.Bottom} id="bottom" className={handleClass} />
+            <Handle type="target" position={Position.Bottom} id="bottom-target" className={handleClass} />
+            <Handle type="source" position={Position.Left} id="left-source" className={handleClass} />
+            <Handle type="target" position={Position.Right} id="right-target" className={handleClass} />
+          </>
+        );
+      })()}
     </div>
   );
 }
@@ -200,6 +211,7 @@ function areComponentNodePropsEqual(
     p.label === n.label &&
     p.status === n.status &&
     p.replicas === n.replicas &&
+    p.shards === n.shards &&
     p.utilization === n.utilization &&
     p.maxQPS === n.maxQPS &&
     p.latencyMs === n.latencyMs &&

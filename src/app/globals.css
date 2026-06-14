@@ -196,7 +196,17 @@ button:not(.react-flow__controls-button), a, [role="button"], [role="tab"], .rea
 }
 button:not([disabled]):active { scale: 0.97; }
 
-.react-flow__node { transition: filter 0.15s ease, scale 0.12s ease; }
+/* Canvas pane: grab hand for pan; crosshair when Shift+drag box-select */
+.react-flow__pane.draggable {
+  cursor: grab;
+}
+.react-flow__pane.draggable.dragging {
+  cursor: grabbing;
+}
+.react-flow__pane.selection:not(.draggable) {
+  cursor: crosshair;
+}
+
 .react-flow__node:hover { filter: brightness(1.06); }
 .react-flow__handle { transition: all 0.15s ease; }
 /* Use the standalone `scale` property so React Flow's own translate transform
@@ -206,6 +216,11 @@ button:not([disabled]):active { scale: 0.97; }
 
 /* Keep React Flow Controls clickable above the pen overlay (overlay z-index: 5) */
 .react-flow .react-flow__controls { z-index: 6; }
+
+/* Edge labels + line-style picker (EdgeLabelRenderer) above nodes (renderer z-index: 4) */
+.react-flow .react-flow__edgelabel-renderer {
+  z-index: 10;
+}
 
 /* Touch devices: bigger connection handles + a generous invisible hit area */
 @media (pointer: coarse) {

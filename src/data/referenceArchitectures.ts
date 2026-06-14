@@ -2,7 +2,13 @@ import type { ReferenceSolution } from "@/types/problem";
 
 type E = [string, string];
 
+const ENTRY_STACK = ["dns", "client", "cdn"] as const;
 const ENTRY_HOP_PRIORITY = ["dns", "cdn", "load-balancer", "api-gateway"] as const;
+const CLIENT_SHORTCUT_TARGETS = [
+  "api-gateway",
+  "rate-limiter",
+  "reverse-proxy",
+] as const;
 
 function pickClientFirstHop(nodes: string[]): string {
   for (const id of ENTRY_HOP_PRIORITY) {
@@ -11,13 +17,102 @@ function pickClientFirstHop(nodes: string[]): string {
   return nodes[0] ?? "load-balancer";
 }
 
+function orderNodesWithEntryStack(nodes: string[]): string[] {
+  const unique = [...new Set(nodes)];
+  const stack = ENTRY_STACK.filter((id) => unique.includes(id));
+  const rest = unique.filter((id) => !(ENTRY_STACK as readonly string[]).includes(id));
+  return [...stack, ...rest];
+}
+
+/** Static/media origins CDN pulls from on cache miss (API stays client → load-balancer). */
+const CDN_ORIGIN_TARGETS = ["origin-shield", "object-storage", "load-balancer"] as const;
+
+/** User-facing web/mobile apps with DNS benefit from CDN for static assets. */
+function shouldAutoAddCdn(nodes: string[]): boolean {
+  if (!nodes.includes("dns") || nodes.includes("cdn")) return false;
+  return nodes.includes("load-balancer") || nodes.includes("api-gateway");
+}
+
+function wireCdnOrigin(
+  nodes: string[],
+  addEdge: (source: string, target: string) => void,
+) {
+  if (!nodes.includes("cdn")) return;
+  for (const target of CDN_ORIGIN_TARGETS) {
+    if (nodes.includes(target)) {
+      addEdge("cdn", target);
+      return;
+    }
+  }
+}
+
 /** Build a reference graph with Users/Client as the leftmost traffic source. */
-function ref(nodes: string[], edges: E[]): ReferenceSolution {
+function ref(
+  nodes: string[],
+  edges: E[],
+  options?: { skipAutoCdn?: boolean },
+): ReferenceSolution {
   const hasClient = nodes.includes("client");
-  const finalNodes = hasClient ? nodes : (["client", ...nodes] as string[]);
-  const finalEdges = hasClient
-    ? edges
-    : ([["client", pickClientFirstHop(nodes)], ...edges] as E[]);
+  const withClient = hasClient ? nodes : (["client", ...nodes] as string[]);
+  let finalNodes = orderNodesWithEntryStack(withClient);
+
+  if (!options?.skipAutoCdn && shouldAutoAddCdn(finalNodes)) {
+    finalNodes = orderNodesWithEntryStack([...finalNodes, "cdn"]);
+  }
+
+  const edgeSet = new Set(edges.map(([s, t]) => `${s}->${t}`));
+  let finalEdges: E[] = [...edges];
+
+  const addEdge = (source: string, target: string) => {
+    const key = `${source}->${target}`;
+    if (!edgeSet.has(key) && finalNodes.includes(source) && finalNodes.includes(target)) {
+      edgeSet.add(key);
+      finalEdges.push([source, target]);
+    }
+  };
+
+  const removeEdge = (source: string, target: string) => {
+    const key = `${source}->${target}`;
+    if (!edgeSet.has(key)) return;
+    edgeSet.delete(key);
+    finalEdges = finalEdges.filter(([s, t]) => `${s}->${t}` !== key);
+  };
+
+  const hasDns = finalNodes.includes("dns");
+  const hasCdn = finalNodes.includes("cdn");
+
+  if (!hasClient) {
+    addEdge("client", pickClientFirstHop(nodes));
+  }
+
+  // Entry stack wiring: client resolves via DNS, then sends traffic to LB/CDN
+  if (finalNodes.includes("client") && hasDns) {
+    addEdge("client", "dns");
+    if (finalNodes.includes("load-balancer")) {
+      addEdge("client", "load-balancer");
+    }
+    if (hasCdn) {
+      addEdge("client", "cdn");
+    }
+    for (const target of CLIENT_SHORTCUT_TARGETS) {
+      removeEdge("client", target);
+    }
+    // DNS returns IPs — clients connect directly, not dns → load-balancer
+    removeEdge("dns", "load-balancer");
+  } else if (finalNodes.includes("client") && hasCdn && !hasDns) {
+    addEdge("client", "cdn");
+  }
+
+  if (hasCdn) {
+    if (hasDns) addEdge("dns", "cdn");
+    wireCdnOrigin(finalNodes, addEdge);
+  }
+
+  // Async return paths create layout cycles — keep producer → consumer only
+  removeEdge("message-queue", "app-server");
+  if (finalNodes.includes("websocket-server") && finalNodes.includes("pub-sub")) {
+    removeEdge("pub-sub", "websocket-server");
+  }
 
   return {
     nodes: finalNodes.map((componentId) => ({ componentId, x: 0, y: 0 })),
@@ -391,10 +486,9 @@ export const REFERENCE_ARCHITECTURES: Record<string, ReferenceSolution> = {
       ["stream-processor", "nosql-db"],
       ["app-server", "config-service"],
       ["app-server", "monitoring"],
-    ]
+    ],
+    { skipAutoCdn: true },
   ),
-
-  // ── Distributed Cache ──
   "distributed-cache": ref(
     [
       "load-balancer",
@@ -832,7 +926,8 @@ export const REFERENCE_ARCHITECTURES: Record<string, ReferenceSolution> = {
       ["app-server", "config-service"],
       ["task-scheduler", "stream-processor"],
       ["app-server", "monitoring"],
-    ]
+    ],
+    { skipAutoCdn: true },
   ),
 
   // ── Netflix ──
@@ -1403,6 +1498,7 @@ export const REFERENCE_ARCHITECTURES: Record<string, ReferenceSolution> = {
   "code-editor": ref(
     [
       "dns",
+      "cdn",
       "load-balancer",
       "api-gateway",
       "auth-service",
@@ -1419,7 +1515,9 @@ export const REFERENCE_ARCHITECTURES: Record<string, ReferenceSolution> = {
       "monitoring",
     ],
     [
+      ["dns", "cdn"],
       ["dns", "load-balancer"],
+      ["cdn", "object-storage"],
       ["load-balancer", "api-gateway"],
       ["api-gateway", "auth-service"],
       ["api-gateway", "app-server"],
@@ -1521,6 +1619,7 @@ export const REFERENCE_ARCHITECTURES: Record<string, ReferenceSolution> = {
   "ai-chat-assistant": ref(
     [
       "dns",
+      "cdn",
       "load-balancer",
       "api-gateway",
       "rate-limiter",
@@ -1540,7 +1639,9 @@ export const REFERENCE_ARCHITECTURES: Record<string, ReferenceSolution> = {
       "monitoring",
     ],
     [
+      ["dns", "cdn"],
       ["dns", "load-balancer"],
+      ["cdn", "object-storage"],
       ["load-balancer", "rate-limiter"],
       ["rate-limiter", "api-gateway"],
       ["api-gateway", "auth-service"],

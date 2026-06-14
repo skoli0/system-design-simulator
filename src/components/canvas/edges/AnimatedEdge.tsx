@@ -1,14 +1,21 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useCallback } from "react";
 import {
   BaseEdge,
   EdgeLabelRenderer,
-  getSmoothStepPath,
   type EdgeProps,
 } from "@xyflow/react";
 import { useSimulationStore } from "@/store/simulationStore";
-import type { CustomEdgeData } from "@/store/canvasStore";
+import {
+  useCanvasStore,
+  isEditableDesignTab,
+  type CustomEdgeData,
+  type EdgePathStyle,
+} from "@/store/canvasStore";
+import { buildEdgePath, resolveEdgePathStyle } from "@/lib/edgePath";
+import { isRequestResponseEdge } from "@/lib/edgeDefaults";
+import { EdgePathStylePicker } from "../EdgePathStylePicker";
 
 const protocolBadge: Record<string, { text: string; color: string } | null> = {
   http: null,
@@ -21,6 +28,8 @@ const protocolBadge: Record<string, { text: string; color: string } | null> = {
 
 function AnimatedEdgeInner({
   id,
+  source,
+  target,
   sourceX,
   sourceY,
   targetX,
@@ -28,35 +37,60 @@ function AnimatedEdgeInner({
   sourcePosition,
   targetPosition,
   style,
-  markerEnd,
+  selected,
   data,
 }: EdgeProps) {
   const isRunning = useSimulationStore((s) => s.isRunning);
   const trafficActive = useSimulationStore((s) => s.trafficActive);
+  const defaultEdgePathStyle = useCanvasStore((s) => s.defaultEdgePathStyle);
+  const selectedEdgeIds = useCanvasStore((s) => s.selectedEdgeIds);
+  const nodes = useCanvasStore((s) => s.nodes);
+  const updateEdgeData = useCanvasStore((s) => s.updateEdgeData);
+  const setDefaultEdgePathStyle = useCanvasStore((s) => s.setDefaultEdgePathStyle);
+  const activeTab = useCanvasStore((s) => s.tabs.find((t) => t.id === s.activeTabId));
+  const isEditable = isEditableDesignTab(activeTab);
   const showFlow = isRunning || trafficActive;
 
   const edgeData = (data ?? {}) as CustomEdgeData;
+  const sourceNode = nodes.find((n) => n.id === source);
+  const targetNode = nodes.find((n) => n.id === target);
+  const sourceComp = sourceNode?.type === "component" ? String(sourceNode.data.componentId) : "";
+  const targetComp = targetNode?.type === "component" ? String(targetNode.data.componentId) : "";
+  const bidirectional =
+    edgeData.bidirectional === true ||
+    (sourceComp && targetComp && isRequestResponseEdge(sourceComp, targetComp));
+
+  const pathStyle = resolveEdgePathStyle(edgeData, defaultEdgePathStyle);
   const isAsync = edgeData.async === true;
   const protocol = edgeData.protocol;
-  const label = edgeData.label;
+  const label =
+    edgeData.label === "req / resp" ? "" : (edgeData.label ?? "");
 
-  const [edgePath, labelX, labelY] = getSmoothStepPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-    borderRadius: 12,
-  });
+  const [edgePath, labelX, labelY] = buildEdgePath(
+    { sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition },
+    pathStyle,
+  );
 
   const badge = protocol ? protocolBadge[protocol] : null;
   const showLabel = label || badge;
+  const showPathPicker =
+    isEditable &&
+    selected === true &&
+    selectedEdgeIds.length === 1 &&
+    selectedEdgeIds[0] === id;
+
+  const handlePathStyleChange = useCallback(
+    (next: EdgePathStyle) => {
+      updateEdgeData(id, { pathStyle: next });
+      setDefaultEdgePathStyle(next);
+    },
+    [id, updateEdgeData, setDefaultEdgePathStyle],
+  );
+
   const strokeColor = showFlow ? "rgb(6, 182, 212)" : "rgb(82, 82, 91)";
 
   return (
     <g>
-      {/* Glow underlay while traffic is flowing */}
       {showFlow && (
         <BaseEdge
           id={`${id}-glow`}
@@ -73,7 +107,7 @@ function AnimatedEdgeInner({
       <BaseEdge
         id={id}
         path={edgePath}
-        markerEnd={markerEnd}
+        markerEnd={undefined}
         style={{
           ...style,
           stroke: strokeColor,
@@ -85,49 +119,83 @@ function AnimatedEdgeInner({
 
       {showFlow && (
         <>
-          <circle r="3" fill="rgb(6, 182, 212)" opacity="0.95">
-            <animateMotion dur="1.8s" repeatCount="indefinite" path={edgePath} />
-          </circle>
-          <circle r="2.5" fill="rgb(34, 211, 238)" opacity="0.7">
-            <animateMotion
-              dur="1.8s"
-              repeatCount="indefinite"
-              path={edgePath}
-              begin="0.45s"
-            />
-          </circle>
-          <circle r="2" fill="rgb(6, 182, 212)" opacity="0.45">
-            <animateMotion
-              dur="1.8s"
-              repeatCount="indefinite"
-              path={edgePath}
-              begin="0.9s"
-            />
-          </circle>
+          {bidirectional ? (
+            <circle r="3" fill="rgb(6, 182, 212)" opacity="0.95">
+              <animate
+                attributeName="fill"
+                values="rgb(6,182,212);rgb(6,182,212);rgb(52,211,153);rgb(52,211,153);rgb(6,182,212)"
+                keyTimes="0;0.49;0.5;0.99;1"
+                dur="3.2s"
+                repeatCount="indefinite"
+              />
+              <animateMotion
+                dur="3.2s"
+                repeatCount="indefinite"
+                path={edgePath}
+                keyPoints="0;1;0"
+                keyTimes="0;0.5;1"
+                calcMode="linear"
+              />
+            </circle>
+          ) : (
+            <>
+              <circle r="3" fill="rgb(6, 182, 212)" opacity="0.95">
+                <animateMotion dur="1.8s" repeatCount="indefinite" path={edgePath} />
+              </circle>
+              <circle r="2.5" fill="rgb(34, 211, 238)" opacity="0.7">
+                <animateMotion
+                  dur="1.8s"
+                  repeatCount="indefinite"
+                  path={edgePath}
+                  begin="0.45s"
+                />
+              </circle>
+              <circle r="2" fill="rgb(6, 182, 212)" opacity="0.45">
+                <animateMotion
+                  dur="1.8s"
+                  repeatCount="indefinite"
+                  path={edgePath}
+                  begin="0.9s"
+                />
+              </circle>
+            </>
+          )}
         </>
       )}
 
-      {showLabel && (
+      {(showLabel || showPathPicker) && (
         <EdgeLabelRenderer>
           <div
             style={{
               position: "absolute",
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               pointerEvents: "all",
+              zIndex: showPathPicker ? 1000 : undefined,
             }}
-            className="nodrag nopan flex items-center gap-1"
+            className="nodrag nopan flex flex-col items-center gap-1.5"
           >
-            {label && (
-              <span className="rounded bg-card px-1.5 py-0.5 text-[10px] text-muted-foreground leading-none">
-                {label}
-              </span>
+            {showPathPicker && (
+              <EdgePathStylePicker
+                value={pathStyle}
+                onChange={handlePathStyleChange}
+                compact
+              />
             )}
-            {badge && (
-              <span
-                className={`rounded border px-1 py-0.5 text-[9px] font-medium leading-none ${badge.color}`}
-              >
-                {badge.text}
-              </span>
+            {showLabel && (
+              <div className="flex items-center gap-1">
+                {label && (
+                  <span className="rounded bg-card px-1.5 py-0.5 text-[10px] leading-none text-muted-foreground">
+                    {label}
+                  </span>
+                )}
+                {badge && (
+                  <span
+                    className={`rounded border px-1 py-0.5 text-[9px] font-medium leading-none ${badge.color}`}
+                  >
+                    {badge.text}
+                  </span>
+                )}
+              </div>
             )}
           </div>
         </EdgeLabelRenderer>

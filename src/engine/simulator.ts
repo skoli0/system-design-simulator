@@ -7,6 +7,8 @@ import {
   LATENCY_SPIKE_THRESHOLD,
   LATENCY_SPIKE_MULTIPLIER,
 } from "./constants";
+import { transferQps } from "./cacheTraffic";
+import { getEffectiveCapacity } from "./dbScaling";
 
 /** Component IDs that split (load-balance) traffic across children. */
 const LOAD_BALANCING_COMPONENTS = new Set(["load-balancer", "api-gateway"]);
@@ -24,16 +26,6 @@ function computeLatency(baseLatency: number, utilization: number): number {
   return baseLatency;
 }
 
-/** Sanitize a raw maxQPS spec: finite positive number, otherwise 0. */
-function sanitizeMaxQPS(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
-}
-
-/** Sanitize a raw replicas spec: integer >= 1 (NaN/negative/fractional inputs clamp to 1). */
-function sanitizeReplicas(value: unknown): number {
-  const n = typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : 1;
-  return Math.max(1, n);
-}
 
 export function runSimulation(
   nodes: Node<ComponentNodeData>[],
@@ -44,13 +36,10 @@ export function runSimulation(
   const nodeMetrics = new Map<string, NodeMetrics>();
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
 
-  // Sanitized effective capacity per node (maxQPS * replicas)
+  // Effective capacity per node (maxQPS × replicas, or × replicas × shards for databases)
   const capacity = new Map<string, number>();
   for (const node of nodes) {
-    capacity.set(
-      node.id,
-      sanitizeMaxQPS(node.data.maxQPS) * sanitizeReplicas(node.data.replicas)
-    );
+    capacity.set(node.id, getEffectiveCapacity(node.data));
   }
 
   // Build adjacency list and in-degree map.
@@ -150,7 +139,9 @@ export function runSimulation(
     const qpsToChild = isSplitter ? output / children.length : output;
     for (const childId of children) {
       if (processed.has(childId)) continue;
-      incomingQPS.set(childId, (incomingQPS.get(childId) ?? 0) + qpsToChild);
+      const addQps = transferQps(nodeId, childId, output, qpsToChild, nodeMap, adjacency);
+      if (addQps <= 0) continue;
+      incomingQPS.set(childId, (incomingQPS.get(childId) ?? 0) + addQps);
     }
   };
 
@@ -173,7 +164,14 @@ export function runSimulation(
     const qpsToChild = isSplitter && children.length > 0 ? output / children.length : output;
 
     for (const childId of children) {
-      incomingQPS.set(childId, (incomingQPS.get(childId) ?? 0) + qpsToChild);
+      const addQps = transferQps(nodeId, childId, output, qpsToChild, nodeMap, adjacency);
+      if (addQps <= 0) {
+        const newDeg = (remaining.get(childId) ?? 1) - 1;
+        remaining.set(childId, newDeg);
+        if (newDeg === 0) queue.push(childId);
+        continue;
+      }
+      incomingQPS.set(childId, (incomingQPS.get(childId) ?? 0) + addQps);
 
       // Decrement in-degree; enqueue when all predecessors processed
       const newDeg = (remaining.get(childId) ?? 1) - 1;
@@ -253,7 +251,9 @@ export function runSimulation(
       const qpsToChild = isSplitter ? output / children.length : output;
       for (const childId of children) {
         if (processed.has(childId)) continue;
-        incomingQPS.set(childId, (incomingQPS.get(childId) ?? 0) + qpsToChild);
+        const addQps = transferQps(nodeId, childId, output, qpsToChild, nodeMap, adjacency);
+        if (addQps <= 0) continue;
+        incomingQPS.set(childId, (incomingQPS.get(childId) ?? 0) + addQps);
         if (cycleSet.has(childId)) cycleQueue.push(childId);
       }
     };

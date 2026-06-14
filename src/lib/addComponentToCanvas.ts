@@ -1,6 +1,7 @@
 import type { Node, Edge } from "@xyflow/react";
 import { getComponentById } from "@/data/components";
 import { getProblemById } from "@/data/problems";
+import { assignHandlesToEdges } from "@/lib/edgeHandles";
 import { buildReferenceGraph, layoutNodesLeftToRight } from "@/lib/loadReference";
 import { wireComponentIntoPath } from "@/lib/wireComponent";
 import { useAppStore } from "@/store/appStore";
@@ -79,7 +80,8 @@ export function relayoutMyDesign(): void {
   if (componentNodes.length === 0) return;
 
   const laidOut = layoutNodesLeftToRight(componentNodes, edges);
-  loadMyDesignContent([...laidOut, ...textNodes], edges);
+  const routedEdges = assignHandlesToEdges(laidOut, edges);
+  loadMyDesignContent([...laidOut, ...textNodes], routedEdges);
   focusMyDesignOnCanvas();
 }
 
@@ -129,6 +131,7 @@ export function addComponentToCanvas(componentId: string): string | null {
       icon: component.icon,
       category: component.category,
       replicas: 1,
+      shards: 1,
       maxQPS: component.maxQPS,
       latencyMs: component.latencyMs,
       scalable: component.scalable,
