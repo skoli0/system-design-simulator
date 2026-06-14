@@ -23,22 +23,29 @@ import { InterviewPhasePanel } from "@/components/interview/InterviewPhasePanel"
 interface RightPanelProps {
   open?: boolean;
   onSimulate: () => void;
+  onStopSimulation: () => void;
   variant?: "desktop" | "mobile";
 }
 
-function RightTabs({ onSimulate }: { onSimulate: () => void }) {
+function RightTabs({
+  onSimulate,
+  onStopSimulation,
+}: {
+  onSimulate: () => void;
+  onStopSimulation: () => void;
+}) {
   const activeRightTab = useAppStore((s) => s.activeRightTab);
   const setActiveRightTab = useAppStore((s) => s.setActiveRightTab);
 
   return (
     <Tabs value={activeRightTab} onValueChange={(v) => setActiveRightTab(v as typeof activeRightTab)} className="flex flex-1 flex-col min-h-0">
-      <div className="mx-2 mt-2 shrink-0 overflow-x-auto">
-        <TabsList className="h-8 w-max bg-zinc-800">
-          <TabsTrigger value="properties" className="h-7 px-2 text-[11px] data-[state=active]:bg-zinc-700 data-[state=active]:text-zinc-100">Props</TabsTrigger>
-          <TabsTrigger value="simulation" className="h-7 px-2 text-[11px] data-[state=active]:bg-zinc-700 data-[state=active]:text-zinc-100">Simulate</TabsTrigger>
-          <TabsTrigger value="score" className="h-7 px-2 text-[11px] data-[state=active]:bg-zinc-700 data-[state=active]:text-zinc-100">Score</TabsTrigger>
-          <TabsTrigger value="capacity" className="h-7 px-2 text-[11px] data-[state=active]:bg-zinc-700 data-[state=active]:text-zinc-100">Capacity</TabsTrigger>
-          <TabsTrigger value="tradeoffs" className="h-7 px-2 text-[11px] data-[state=active]:bg-zinc-700 data-[state=active]:text-zinc-100">Trade-offs</TabsTrigger>
+      <div className="mx-2 mt-2 shrink-0">
+        <TabsList className="grid h-8 w-full grid-cols-5 gap-px bg-muted p-0.5">
+          <TabsTrigger value="properties" className="h-7 min-w-0 px-1 text-[10px] data-[state=active]:bg-accent data-[state=active]:text-foreground">Props</TabsTrigger>
+          <TabsTrigger value="simulation" className="h-7 min-w-0 px-1 text-[10px] data-[state=active]:bg-accent data-[state=active]:text-foreground">Simulate</TabsTrigger>
+          <TabsTrigger value="score" className="h-7 min-w-0 px-1 text-[10px] data-[state=active]:bg-accent data-[state=active]:text-foreground">Score</TabsTrigger>
+          <TabsTrigger value="capacity" className="h-7 min-w-0 px-1 text-[10px] data-[state=active]:bg-accent data-[state=active]:text-foreground">Capacity</TabsTrigger>
+          <TabsTrigger value="tradeoffs" className="h-7 min-w-0 px-1 text-[10px] data-[state=active]:bg-accent data-[state=active]:text-foreground">Trade-offs</TabsTrigger>
         </TabsList>
       </div>
 
@@ -50,20 +57,22 @@ function RightTabs({ onSimulate }: { onSimulate: () => void }) {
         </ScrollArea>
       </TabsContent>
 
-      <TabsContent value="simulation" className="mt-0 flex-1 overflow-hidden">
-        <ScrollArea className="h-full">
-          <div className="p-3 space-y-4">
-            <SimulationControls onSimulate={onSimulate} />
-            <Separator className="bg-zinc-800" />
-            <MetricsDisplay />
+      <TabsContent value="simulation" className="mt-0 flex flex-1 flex-col min-h-0 overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 p-3">
+          <div className="shrink-0">
+            <SimulationControls onSimulate={onSimulate} onStop={onStopSimulation} />
           </div>
-        </ScrollArea>
+          <Separator className="shrink-0 bg-muted" />
+          <MetricsDisplay onSimulate={onSimulate} className="min-h-0 flex-1" />
+        </div>
       </TabsContent>
 
       <TabsContent value="score" className="mt-0 flex-1 overflow-hidden">
-        <div className="h-full p-3">
-          <ScoreReport />
-        </div>
+        <ScrollArea className="h-full">
+          <div className="p-3">
+            <ScoreReport />
+          </div>
+        </ScrollArea>
       </TabsContent>
 
       <TabsContent value="capacity" className="mt-0 flex-1 overflow-hidden">
@@ -78,7 +87,7 @@ function RightTabs({ onSimulate }: { onSimulate: () => void }) {
         <ScrollArea className="h-full">
           <div className="p-3 space-y-4">
             <TradeoffLog />
-            <Separator className="bg-zinc-800" />
+            <Separator className="bg-muted" />
             <TradeoffCards />
           </div>
         </ScrollArea>
@@ -87,7 +96,12 @@ function RightTabs({ onSimulate }: { onSimulate: () => void }) {
   );
 }
 
-export function RightPanel({ open = true, onSimulate, variant = "desktop" }: RightPanelProps) {
+export function RightPanel({
+  open = true,
+  onSimulate,
+  onStopSimulation,
+  variant = "desktop",
+}: RightPanelProps) {
   const interviewMode = useInterviewStore((s) => s.mode);
   const currentPhase = useInterviewStore((s) => s.currentPhase);
 
@@ -96,16 +110,20 @@ export function RightPanel({ open = true, onSimulate, variant = "desktop" }: Rig
 
   if (variant === "mobile") {
     return (
-      <div className="flex h-full w-full flex-col bg-zinc-900">
-        {showInterviewPhasePanel ? <InterviewPhasePanel /> : <RightTabs onSimulate={onSimulate} />}
+      <div className="flex h-full w-full flex-col bg-card">
+        {showInterviewPhasePanel ? (
+          <InterviewPhasePanel />
+        ) : (
+          <RightTabs onSimulate={onSimulate} onStopSimulation={onStopSimulation} />
+        )}
       </div>
     );
   }
 
   return (
     <aside
-      className={`hidden shrink-0 flex-col border-l border-zinc-800 bg-zinc-900 overflow-hidden transition-all duration-200 md:flex ${
-        open ? "w-[300px] opacity-100" : "w-0 opacity-0 border-l-0"
+      className={`hidden shrink-0 flex-col border-l border-border bg-card overflow-hidden transition-all duration-200 md:flex ${
+        open ? "w-[320px] opacity-100" : "w-0 opacity-0 border-l-0"
       }`}
       aria-hidden={!open || undefined}
       inert={!open || undefined}
@@ -113,8 +131,8 @@ export function RightPanel({ open = true, onSimulate, variant = "desktop" }: Rig
       {showInterviewPhasePanel ? (
         <InterviewPhasePanel />
       ) : (
-        <div className="flex w-[300px] flex-1 flex-col min-h-0">
-          <RightTabs onSimulate={onSimulate} />
+        <div className="flex w-[320px] flex-1 flex-col min-h-0">
+          <RightTabs onSimulate={onSimulate} onStopSimulation={onStopSimulation} />
         </div>
       )}
     </aside>
@@ -135,30 +153,30 @@ function EdgePropertiesPanel() {
 
   return (
     <div className="space-y-3">
-      <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         Edge Properties
       </p>
 
       <div className="space-y-2">
         {/* Label */}
         <div>
-          <label className="mb-1 block text-xs text-zinc-400">Label</label>
+          <label className="mb-1 block text-xs text-muted-foreground">Label</label>
           <input
             type="text"
             value={data.label ?? ""}
             onChange={(e) => updateEdgeData(selectedEdge.id, { label: e.target.value })}
             placeholder="e.g. /api/users"
-            className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 outline-none focus:border-cyan-600 focus:ring-1 focus:ring-cyan-600/50"
+            className="w-full rounded-md border border-border bg-muted px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-cyan-600 focus:ring-1 focus:ring-cyan-600/50"
           />
         </div>
 
         {/* Protocol */}
         <div>
-          <label className="mb-1 block text-xs text-zinc-400">Protocol</label>
+          <label className="mb-1 block text-xs text-muted-foreground">Protocol</label>
           <select
             value={data.protocol ?? "http"}
             onChange={(e) => updateEdgeData(selectedEdge.id, { protocol: e.target.value as CustomEdgeData["protocol"] })}
-            className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-xs text-zinc-200 outline-none focus:border-cyan-600 focus:ring-1 focus:ring-cyan-600/50"
+            className="w-full rounded-md border border-border bg-muted px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-cyan-600 focus:ring-1 focus:ring-cyan-600/50"
           >
             {protocols.map((p) => (
               <option key={p} value={p}>
@@ -170,14 +188,14 @@ function EdgePropertiesPanel() {
 
         {/* Sync / Async toggle */}
         <div>
-          <label className="mb-1 block text-xs text-zinc-400">Communication</label>
+          <label className="mb-1 block text-xs text-muted-foreground">Communication</label>
           <div className="flex gap-1">
             <button
               onClick={() => updateEdgeData(selectedEdge.id, { async: false })}
               className={`flex-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
                 !data.async
                   ? "bg-cyan-600/20 text-cyan-400 border border-cyan-500/30"
-                  : "bg-zinc-800 text-zinc-400 border border-zinc-700 hover:bg-zinc-700"
+                  : "bg-muted text-muted-foreground border border-border hover:bg-accent"
               }`}
             >
               Sync
@@ -187,13 +205,13 @@ function EdgePropertiesPanel() {
               className={`flex-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
                 data.async
                   ? "bg-cyan-600/20 text-cyan-400 border border-cyan-500/30"
-                  : "bg-zinc-800 text-zinc-400 border border-zinc-700 hover:bg-zinc-700"
+                  : "bg-muted text-muted-foreground border border-border hover:bg-accent"
               }`}
             >
               Async
             </button>
           </div>
-          <p className="mt-1 text-[11px] text-zinc-500">
+          <p className="mt-1 text-[11px] text-muted-foreground">
             {data.async ? "Dashed line — asynchronous (e.g. message queue)" : "Solid line — synchronous (e.g. HTTP call)"}
           </p>
         </div>
@@ -203,7 +221,7 @@ function EdgePropertiesPanel() {
           variant="outline"
           size="sm"
           onClick={() => deleteEdge(selectedEdge.id)}
-          className="w-full gap-1.5 border-zinc-700 text-rose-400 hover:bg-zinc-800 hover:text-rose-300"
+          className="w-full gap-1.5 border-border text-rose-400 hover:bg-muted hover:text-rose-300"
         >
           <Trash2 className="h-3 w-3" />
           Remove Connection
@@ -231,7 +249,7 @@ function PropertiesTab() {
       {/* Problem requirements */}
       {problem && (
         <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Requirements — {problem.title}
           </p>
           <div className="space-y-1.5">
@@ -244,10 +262,10 @@ function PropertiesTab() {
             ].map((item) => (
               <div
                 key={item.label}
-                className="flex items-center justify-between rounded-md bg-zinc-800 px-2.5 py-1.5"
+                className="flex items-center justify-between rounded-md bg-muted px-2.5 py-1.5"
               >
-                <span className="text-xs text-zinc-400">{item.label}</span>
-                <span className="font-mono text-xs text-zinc-300">{item.value}</span>
+                <span className="text-xs text-muted-foreground">{item.label}</span>
+                <span className="font-mono text-xs text-foreground/80">{item.value}</span>
               </div>
             ))}
           </div>
@@ -257,7 +275,7 @@ function PropertiesTab() {
       {/* Constraints */}
       {problem && problem.constraints.length > 0 && (
         <>
-          <Separator className="bg-zinc-800" />
+          <Separator className="bg-muted" />
           <ConstraintsSection constraints={problem.constraints} />
         </>
       )}
@@ -265,25 +283,25 @@ function PropertiesTab() {
       {/* Hints */}
       {problem && problem.hints.length > 0 && (
         <>
-          <Separator className="bg-zinc-800" />
+          <Separator className="bg-muted" />
           <HintsSection hints={problem.hints} />
         </>
       )}
 
-      <Separator className="bg-zinc-800" />
+      <Separator className="bg-muted" />
 
       {/* Selected node properties */}
       {selectedNode && selectedNode.type === "text" ? (
         <div className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Text Annotation
           </p>
           <div className="space-y-2">
-            <div className="rounded-md bg-zinc-800 px-3 py-2">
-              <p className="text-xs font-medium text-zinc-200">
+            <div className="rounded-md bg-muted px-3 py-2">
+              <p className="text-xs font-medium text-foreground">
                 Text Note
               </p>
-              <p className="mt-0.5 text-xs text-zinc-500">
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 Double-click (or tap) on canvas to edit
               </p>
             </div>
@@ -295,7 +313,7 @@ function PropertiesTab() {
                   new CustomEvent("textnode:edit", { detail: { id: selectedNode.id } })
                 )
               }
-              className="w-full gap-1.5 border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+              className="w-full gap-1.5 border-border text-foreground/80 hover:bg-muted hover:text-foreground"
             >
               <Pencil className="h-3 w-3" />
               Edit text
@@ -304,7 +322,7 @@ function PropertiesTab() {
               variant="outline"
               size="sm"
               onClick={() => deleteNode(selectedNode.id)}
-              className="w-full gap-1.5 border-zinc-700 text-rose-400 hover:bg-zinc-800 hover:text-rose-300"
+              className="w-full gap-1.5 border-border text-rose-400 hover:bg-muted hover:text-rose-300"
             >
               <Trash2 className="h-3 w-3" />
               Remove Note
@@ -316,16 +334,16 @@ function PropertiesTab() {
           const data = selectedNode.data as ComponentNodeData;
           return (
         <div className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Component Properties
           </p>
 
           <div className="space-y-2">
-            <div className="rounded-md bg-zinc-800 px-3 py-2">
-              <p className="text-xs font-medium text-zinc-200">
+            <div className="rounded-md bg-muted px-3 py-2">
+              <p className="text-xs font-medium text-foreground">
                 {data.label as string}
               </p>
-              <p className="mt-0.5 text-xs text-zinc-500">
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 {data.category as string} · Max {(data.maxQPS as number) === Infinity ? "\u221e" : new Intl.NumberFormat("en-US").format(data.maxQPS as number)} QPS
               </p>
             </div>
@@ -333,7 +351,7 @@ function PropertiesTab() {
             {/* Replicas slider \u2014 shown for every component node */}
             <div>
               <div className="mb-1.5 flex items-center justify-between">
-                <label className="text-xs text-zinc-400">Replicas</label>
+                <label className="text-xs text-muted-foreground">Replicas</label>
                 <span className="font-mono text-xs text-cyan-500">
                   {data.replicas as number}
                 </span>
@@ -345,11 +363,11 @@ function PropertiesTab() {
                   updateNodeData(selectedNode.id, { replicas: Array.isArray(v) ? v[0] : v })
                 }
                 min={1}
-                max={20}
+                max={50}
                 step={1}
                 className=""
               />
-              <p className="mt-1 text-[11px] text-zinc-400">
+              <p className="mt-1 text-[11px] text-muted-foreground">
                 Effective capacity: {(data.maxQPS as number) === Infinity ? "\u221e" : new Intl.NumberFormat("en-US").format((data.maxQPS as number) * (data.replicas as number))} QPS
               </p>
             </div>
@@ -364,8 +382,8 @@ function PropertiesTab() {
                   key={item.label}
                   className="flex items-center justify-between text-xs"
                 >
-                  <span className="text-zinc-400">{item.label}</span>
-                  <span className="text-zinc-300">{item.value}</span>
+                  <span className="text-muted-foreground">{item.label}</span>
+                  <span className="text-foreground/80">{item.value}</span>
                 </div>
               ))}
             </div>
@@ -374,14 +392,14 @@ function PropertiesTab() {
               variant="outline"
               size="sm"
               onClick={() => deleteNode(selectedNode.id)}
-              className="w-full gap-1.5 border-zinc-700 text-rose-400 hover:bg-zinc-800 hover:text-rose-300"
+              className="w-full gap-1.5 border-border text-rose-400 hover:bg-muted hover:text-rose-300"
             >
               <Trash2 className="h-3 w-3" />
               Remove Component
             </Button>
           </div>
 
-          <Separator className="bg-zinc-800" />
+          <Separator className="bg-muted" />
           <LearnSection componentId={data.componentId as string} label={data.label as string} />
         </div>
           );
@@ -390,14 +408,14 @@ function PropertiesTab() {
         <EdgePropertiesPanel />
       ) : (
         <div className="flex flex-col items-center gap-3 py-6 text-center">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800">
-            <Info className="h-4 w-4 text-zinc-500" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+            <Info className="h-4 w-4 text-muted-foreground" />
           </div>
           <div>
-            <p className="text-xs font-medium text-zinc-400">
+            <p className="text-xs font-medium text-muted-foreground">
               No component selected
             </p>
-            <p className="mt-1 text-xs text-zinc-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               Click a component or edge on the canvas to edit its properties.
             </p>
           </div>
@@ -413,14 +431,14 @@ function ConstraintsSection({ constraints }: { constraints: string[] }) {
 
   return (
     <div className="space-y-2">
-      <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         Constraints
       </p>
       <div className="space-y-1.5">
         {shown.map((c, i) => (
           <div key={i} className="flex items-start gap-2">
-            <CheckSquare className="mt-0.5 h-3 w-3 shrink-0 text-zinc-400" />
-            <span className="text-xs leading-relaxed text-zinc-400">{c}</span>
+            <CheckSquare className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
+            <span className="text-xs leading-relaxed text-muted-foreground">{c}</span>
           </div>
         ))}
       </div>
@@ -463,32 +481,32 @@ function HintsSection({ hints }: { hints: { title: string; content: string }[] }
 
   return (
     <div className="space-y-2">
-      <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         Hints
       </p>
       <div className="space-y-1.5">
         {hints.map((hint, i) => (
           <div
             key={i}
-            className="rounded-md border border-zinc-700 bg-zinc-800 overflow-hidden"
+            className="rounded-md border border-border bg-muted overflow-hidden"
           >
             <button
               onClick={() => toggleHint(i)}
               className="flex w-full items-center gap-2 px-2.5 py-2 text-left"
             >
-              <Lightbulb className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
-              <span className="flex-1 text-xs font-medium text-zinc-300">
+              <Lightbulb className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="flex-1 text-xs font-medium text-foreground/80">
                 {hint.title}
               </span>
               {expandedHints.has(i) ? (
-                <ChevronDown className="h-3 w-3 shrink-0 text-zinc-500" />
+                <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
               ) : (
-                <ChevronRight className="h-3 w-3 shrink-0 text-zinc-500" />
+                <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
               )}
             </button>
             {expandedHints.has(i) && (
-              <div className="border-t border-zinc-700 px-2.5 py-2">
-                <p className="text-xs leading-relaxed text-zinc-400">
+              <div className="border-t border-border px-2.5 py-2">
+                <p className="text-xs leading-relaxed text-muted-foreground">
                   {hint.content}
                 </p>
               </div>
@@ -554,16 +572,16 @@ function LearnSection({ componentId, label }: { componentId: string; label: stri
     <div className="space-y-2">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-2 rounded-md border border-zinc-700 bg-zinc-800/50 px-2.5 py-2 text-left transition-colors hover:bg-zinc-800"
+        className="flex w-full items-center gap-2 rounded-md border border-border bg-muted/50 px-2.5 py-2 text-left transition-colors hover:bg-muted"
       >
         <BookOpen className="h-3.5 w-3.5 shrink-0 text-cyan-400" />
-        <span className="flex-1 text-xs font-medium text-zinc-300">
+        <span className="flex-1 text-xs font-medium text-foreground/80">
           Learn about {label}
         </span>
         {expanded ? (
-          <ChevronDown className="h-3 w-3 shrink-0 text-zinc-500" />
+          <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
         ) : (
-          <ChevronRight className="h-3 w-3 shrink-0 text-zinc-500" />
+          <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
         )}
       </button>
 
@@ -576,7 +594,7 @@ function LearnSection({ componentId, label }: { componentId: string; label: stri
               <div
                 key={section.key}
                 className={`rounded-md border overflow-hidden transition-colors ${
-                  isOpen ? `${section.borderAccent} bg-zinc-800/80` : "border-zinc-700/50 bg-zinc-800/30"
+                  isOpen ? `${section.borderAccent} bg-muted/80` : "border-border/50 bg-muted/30"
                 }`}
               >
                 <button
@@ -584,24 +602,24 @@ function LearnSection({ componentId, label }: { componentId: string; label: stri
                   className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left"
                 >
                   <Icon className={`h-3 w-3 shrink-0 ${section.accent}`} />
-                  <span className="flex-1 text-xs font-medium text-zinc-300">
+                  <span className="flex-1 text-xs font-medium text-foreground/80">
                     {section.label}
                   </span>
                   {isOpen ? (
-                    <ChevronDown className="h-3 w-3 shrink-0 text-zinc-500" />
+                    <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
                   ) : (
-                    <ChevronRight className="h-3 w-3 shrink-0 text-zinc-500" />
+                    <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
                   )}
                 </button>
                 {isOpen && (
-                  <div className="border-t border-zinc-700/50 px-2.5 py-2 space-y-1.5">
+                  <div className="border-t border-border/50 px-2.5 py-2 space-y-1.5">
                     {section.key === "patterns"
                       ? concept.commonPatterns.map((pattern, i) => (
                           <div key={i} className="space-y-0.5">
                             <p className={`text-xs font-medium ${section.accent}`}>
                               {pattern.name}
                             </p>
-                            <p className="text-[11px] leading-relaxed text-zinc-400">
+                            <p className="text-[11px] leading-relaxed text-muted-foreground">
                               {pattern.description}
                             </p>
                           </div>
@@ -615,7 +633,7 @@ function LearnSection({ componentId, label }: { componentId: string; label: stri
                               <span className={`mt-0.5 text-[10px] font-bold ${section.accent}`}>
                                 TIP
                               </span>
-                              <span className="text-[11px] leading-relaxed text-zinc-300">
+                              <span className="text-[11px] leading-relaxed text-foreground/80">
                                 {item}
                               </span>
                             </div>
@@ -623,7 +641,7 @@ function LearnSection({ componentId, label }: { componentId: string; label: stri
                         : section.items.map((item, i) => (
                             <div key={i} className="flex items-start gap-1.5">
                               <span className={`mt-1 h-1 w-1 shrink-0 rounded-full ${section.accent.replace("text-", "bg-")}`} />
-                              <span className="text-[11px] leading-relaxed text-zinc-400">
+                              <span className="text-[11px] leading-relaxed text-muted-foreground">
                                 {item}
                               </span>
                             </div>

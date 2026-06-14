@@ -28,7 +28,7 @@ function getCategoryColor(category: TradeoffEntry["category"]) {
     case "availability":
       return "border-cyan-500/30 bg-cyan-500/10 text-cyan-400";
     case "other":
-      return "border-zinc-500/30 bg-zinc-500/10 text-zinc-400";
+      return "border-muted-foreground/30 bg-muted-foreground/10 text-muted-foreground";
   }
 }
 
@@ -68,7 +68,7 @@ export function TradeoffLog() {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Your Trade-offs
         </p>
         {!formOpen && (
@@ -76,7 +76,7 @@ export function TradeoffLog() {
             variant="outline"
             size="sm"
             onClick={() => setFormOpen(true)}
-            className="h-6 gap-1 border-zinc-700 px-2 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+            className="h-6 gap-1 border-border px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <Plus className="h-3 w-3" />
             Add
@@ -85,32 +85,32 @@ export function TradeoffLog() {
       </div>
 
       {formOpen && (
-        <div className="space-y-2 rounded-md border border-zinc-700 bg-zinc-800 p-2.5">
+        <div className="space-y-2 rounded-md border border-border bg-muted p-2.5">
           <input
             type="text"
             placeholder="Decision (e.g. Chose Redis over Memcached)"
             value={decision}
             onChange={(e) => setDecision(e.target.value)}
-            className="w-full rounded-md border border-zinc-600 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 outline-none focus:border-cyan-600"
+            className="w-full rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-cyan-600"
           />
           <textarea
             placeholder="Rationale — why this choice?"
             value={rationale}
             onChange={(e) => setRationale(e.target.value)}
             rows={2}
-            className="w-full resize-none rounded-md border border-zinc-600 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 outline-none focus:border-cyan-600"
+            className="w-full resize-none rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-cyan-600"
           />
           <textarea
             placeholder="Alternatives considered"
             value={alternatives}
             onChange={(e) => setAlternatives(e.target.value)}
             rows={2}
-            className="w-full resize-none rounded-md border border-zinc-600 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 outline-none focus:border-cyan-600"
+            className="w-full resize-none rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-cyan-600"
           />
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value as TradeoffEntry["category"])}
-            className="w-full rounded-md border border-zinc-600 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-200 outline-none focus:border-cyan-600"
+            className="w-full rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-cyan-600"
           >
             {CATEGORIES.map((cat) => (
               <option key={cat} value={cat}>
@@ -132,7 +132,7 @@ export function TradeoffLog() {
               variant="outline"
               size="sm"
               onClick={handleCancel}
-              className="h-6 border-zinc-700 px-3 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300"
+              className="h-6 border-border px-3 text-xs text-muted-foreground hover:bg-muted hover:text-foreground/80"
             >
               Cancel
             </Button>
@@ -141,7 +141,7 @@ export function TradeoffLog() {
       )}
 
       {entries.length === 0 && !formOpen && (
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs text-muted-foreground">
           No trade-offs logged yet. Record your design decisions as you go.
         </p>
       )}
@@ -150,27 +150,27 @@ export function TradeoffLog() {
         {entries.map((entry) => (
           <div
             key={entry.id}
-            className="group rounded-md border border-zinc-700 bg-zinc-800 p-2.5"
+            className="group rounded-md border border-border bg-muted p-2.5"
           >
             <div className="flex items-start justify-between gap-2">
-              <p className="text-xs font-medium text-zinc-200">
+              <p className="text-xs font-medium text-foreground">
                 {entry.decision}
               </p>
               <button
                 onClick={() => removeEntry(entry.id)}
                 aria-label={`Delete trade-off: ${entry.decision}`}
-                className="shrink-0 rounded p-0.5 text-zinc-500 opacity-60 transition-opacity hover:text-rose-400 group-focus-within:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
+                className="shrink-0 rounded p-0.5 text-muted-foreground opacity-60 transition-opacity hover:text-rose-400 group-focus-within:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
               >
                 <Trash2 className="h-3 w-3" />
               </button>
             </div>
             {entry.rationale && (
-              <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                 {entry.rationale}
               </p>
             )}
             {entry.alternatives && (
-              <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                 Alt: {entry.alternatives}
               </p>
             )}

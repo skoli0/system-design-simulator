@@ -44,7 +44,7 @@ export function InterviewBar() {
   }
 
   // Total timer color
-  let totalTimerColor = "text-zinc-300";
+  let totalTimerColor = "text-foreground/80";
   if (timerSeconds > totalTarget * 2) {
     totalTimerColor = "text-red-400";
   } else if (timerSeconds > totalTarget) {
@@ -54,7 +54,7 @@ export function InterviewBar() {
   return (
     // Two stacked rows below md so the controls are always on-screen;
     // a single row on md+ — no horizontal scrolling needed anywhere.
-    <div className="flex shrink-0 flex-col gap-1.5 border-b border-zinc-800 bg-zinc-900 px-3 py-1.5 md:h-11 md:flex-row md:items-center md:justify-between md:gap-3 md:py-0">
+    <div className="flex shrink-0 flex-col gap-1.5 border-b border-border bg-card px-3 py-1.5 md:h-11 md:flex-row md:items-center md:justify-between md:gap-3 md:py-0">
       {/* Row 1 — phase stepper + phase info */}
       <div className="flex min-w-0 items-center justify-between gap-3 md:flex-1">
         <div className="flex shrink-0 items-center gap-1">
@@ -67,8 +67,8 @@ export function InterviewBar() {
                   i === currentPhase
                     ? "bg-cyan-500 text-white"
                     : i < currentPhase
-                      ? "bg-zinc-600 text-zinc-300"
-                      : "bg-zinc-700 text-zinc-500"
+                      ? "bg-muted-foreground/40 text-foreground/80"
+                      : "bg-accent text-muted-foreground"
                 }`}
                 title={phase.name}
                 aria-label={`Go to phase ${i + 1}: ${phase.name}`}
@@ -79,7 +79,7 @@ export function InterviewBar() {
               {i < phases.length - 1 && (
                 <div
                   className={`h-px w-2 md:w-4 ${
-                    i < currentPhase ? "bg-zinc-500" : "bg-zinc-700"
+                    i < currentPhase ? "bg-muted-foreground" : "bg-accent"
                   }`}
                 />
               )}
@@ -89,10 +89,10 @@ export function InterviewBar() {
 
         {/* Phase info */}
         <div className="min-w-0 text-right">
-          <p className="truncate text-xs font-medium text-zinc-200">
+          <p className="truncate text-xs font-medium text-foreground">
             {phases[currentPhase].name}
           </p>
-          <p className="hidden truncate text-[10px] text-zinc-400 sm:block">
+          <p className="hidden truncate text-[10px] text-muted-foreground sm:block">
             {phases[currentPhase].description}
           </p>
         </div>
@@ -103,13 +103,13 @@ export function InterviewBar() {
         <div className="flex min-w-0 items-center gap-2 md:gap-3">
           {/* Phase timer */}
           <div className="flex items-center gap-1.5">
-            <Clock className="hidden h-3.5 w-3.5 text-zinc-500 sm:block" />
+            <Clock className="hidden h-3.5 w-3.5 text-muted-foreground sm:block" />
             <span className={`whitespace-nowrap font-mono text-[10px] sm:text-xs ${phaseTimerColor}`}>
               Phase: {formatTime(phaseElapsed)} / {formatTime(targetSeconds)}
             </span>
           </div>
 
-          <div className="h-4 w-px bg-zinc-700" />
+          <div className="h-4 w-px bg-accent" />
 
           {/* Total timer */}
           <span className={`whitespace-nowrap font-mono text-[10px] sm:text-xs ${totalTimerColor}`}>
@@ -118,12 +118,12 @@ export function InterviewBar() {
         </div>
 
         <div className="flex shrink-0 items-center gap-1 md:gap-2">
-          <div className="hidden h-4 w-px bg-zinc-700 md:block" />
+          <div className="hidden h-4 w-px bg-accent md:block" />
 
           {/* Pause/Play */}
           <button
             onClick={toggleTimer}
-            className="flex h-6 w-6 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+            className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             title={timerRunning ? "Pause timer" : "Resume timer"}
             aria-label={timerRunning ? "Pause timer" : "Resume timer"}
           >
@@ -138,7 +138,7 @@ export function InterviewBar() {
           <button
             onClick={prevPhase}
             disabled={currentPhase === 0}
-            className="flex h-6 w-6 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed"
+            className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
             title="Previous phase"
             aria-label="Previous phase"
           >
@@ -147,19 +147,19 @@ export function InterviewBar() {
           <button
             onClick={nextPhase}
             disabled={currentPhase === phases.length - 1}
-            className="flex h-6 w-6 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed"
+            className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
             title="Next phase"
             aria-label="Next phase"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
 
-          <div className="h-4 w-px bg-zinc-700" />
+          <div className="h-4 w-px bg-accent" />
 
           {/* End interview */}
           <button
             onClick={endInterview}
-            className="flex h-6 items-center gap-1 rounded-md px-2 text-xs text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-rose-400"
+            className="flex h-6 items-center gap-1 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-rose-400"
             title="End interview"
           >
             <X className="h-3.5 w-3.5" />

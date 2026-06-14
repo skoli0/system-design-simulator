@@ -15,7 +15,7 @@
 **The open-source system design interview simulator.**<br/>
 **Build architectures. Simulate traffic. Get scored. Pass interviews.**
 
-[Getting Started](#quick-start) &nbsp;&middot;&nbsp; [Features](#features) &nbsp;&middot;&nbsp; [35 Problems](#35-design-problems) &nbsp;&middot;&nbsp; [Contributing](#contributing)
+[Getting Started](#quick-start) &nbsp;&middot;&nbsp; [Features](#features) &nbsp;&middot;&nbsp; [37 Problems](#37-design-problems) &nbsp;&middot;&nbsp; [Contributing](#contributing)
 
 </div>
 
@@ -41,17 +41,17 @@ It's the flight simulator for system design interviews.
 <tr>
 <td width="50%">
 
-### 30 Infrastructure Components
+### 38 Infrastructure Components
 
 Every building block you need for any system design:
 
 **Networking** — DNS, CDN, Load Balancer, API Gateway, Rate Limiter, Reverse Proxy, Origin Shield
 
-**Compute** — App Server, Auth Service, WebSocket Server, Task Scheduler, Stream Processor, Notification Service
+**Compute** — App Server, Auth Service, WebSocket Server, Task Scheduler, Stream Processor, Notification Service, LLM Gateway, Embedding Service
 
-**Storage** — SQL DB, NoSQL DB, Cache/Redis, Object Storage, Search/ES, Graph DB, Time-Series DB, Data Warehouse, File Store
+**Storage** — SQL DB, NoSQL DB, Cache/Redis, Object Storage, Search/ES, Graph DB, Time-Series DB, Data Warehouse, File Store, Vector DB, Geospatial Index
 
-**Infrastructure** — Message Queue, Service Mesh, Monitoring, Service Discovery, Distributed Lock, Circuit Breaker, Coordination Service
+**Infrastructure** — Message Queue, Pub/Sub, Service Mesh, Monitoring, Service Discovery, Distributed Lock, Circuit Breaker, Coordination Service, ID Generator, Sharded Counter, Config Service
 
 **Special** — Custom Component (double-click to rename to anything)
 
@@ -72,6 +72,9 @@ Every component has **verified benchmarks**:
 | Elasticsearch | 20,000 | 10ms |
 | Object Storage (S3) | 25,000 | 75ms |
 | CDN | 500,000 | 15ms |
+| Vector DB | 10,000 | 10ms |
+| LLM Gateway | 5,000 | 2000ms |
+| Embedding Service | 20,000 | 50ms |
 
 All values cross-checked against official docs and benchmarks.
 
@@ -179,9 +182,9 @@ Educational content for **every** infrastructure component. Select any component
 
 ### Trade-off Decision Log
 
-21 pre-built trade-off cards with side-by-side comparisons:
+23 pre-built trade-off cards with side-by-side comparisons:
 
-SQL vs NoSQL | Push vs Pull | Sync vs Async | Strong vs Eventual Consistency | Monolith vs Microservices | REST vs gRPC | Cache-aside vs Write-through | Vertical vs Horizontal Scaling | Polling vs WebSocket | Single vs Multi-leader | Hash vs Range Partitioning | CDN Push vs Pull | Token Bucket vs Sliding Window | At-least-once vs Exactly-once Processing | Optimistic vs Pessimistic Locking | Long-polling vs SSE vs WebSocket | Kafka vs RabbitMQ | JWT vs Session Tokens | Normalization vs Denormalization | Batch vs Stream Processing | Active-active vs Active-passive
+SQL vs NoSQL | Push vs Pull | Sync vs Async | Strong vs Eventual Consistency | Monolith vs Microservices | REST vs gRPC | Cache-aside vs Write-through | Vertical vs Horizontal Scaling | Polling vs WebSocket | Single vs Multi-leader | Hash vs Range Partitioning | CDN Push vs Pull | Token Bucket vs Sliding Window | At-least-once vs Exactly-once Processing | Optimistic vs Pessimistic Locking | Long-polling vs SSE vs WebSocket | Kafka vs RabbitMQ | JWT vs Session Tokens | Normalization vs Denormalization | Batch vs Stream Processing | Active-active vs Active-passive | RAG vs Fine-Tuning | Vector Search vs Keyword Search
 
 Log your own decisions with rationale during practice.
 
@@ -196,16 +199,16 @@ Structured progression from beginner to expert:
 | **Foundations** | URL Shortener, Rate Limiter, Parking Lot | Core building blocks |
 | **Intermediate** | Notification System, Autocomplete, Instagram, Spotify, Distributed Cache | Combining systems |
 | **Advanced** | Twitter, Chat, Web Crawler, Dropbox, E-Commerce | Complex distributed systems |
-| **Expert** | Uber, YouTube, Payment, Ticketmaster, Google Docs, Slack, Monitoring, Netflix, Zoom, Google Maps, WhatsApp, TikTok, Kafka, etc. | Multi-concern architectures |
+| **Expert** | Uber, YouTube, Payment, Ticketmaster, Google Docs, Slack, Monitoring, Netflix, Zoom, Google Maps, WhatsApp, TikTok, Kafka, RAG Q&A, AI Chat Assistant, etc. | Multi-concern architectures |
 
 Track completion with checkboxes. Concept prerequisites shown per problem.
 
 ---
 
-## 35 Design Problems
+## 37 Design Problems
 
 <details>
-<summary><strong>Click to see all 35 problems</strong></summary>
+<summary><strong>Click to see all 37 problems</strong></summary>
 
 | # | Problem | Difficulty | Key Concepts |
 |---|---------|-----------|-------------|
@@ -244,6 +247,8 @@ Track completion with checkboxes. Concept prerequisites shown per problem.
 | 33 | Digital Wallet / UPI | Hard | P2P transfers, idempotency, compliance |
 | 34 | Online Code Editor | Medium | Sandboxed execution, LSP, real-time collab |
 | 35 | CI/CD Pipeline | Medium | Build DAGs, artifact storage, canary deploys |
+| 36 | RAG Q&A System | Hard | Vector search, chunking, hybrid retrieval, LLM grounding |
+| 37 | AI Chat Assistant | Hard | Streaming inference, context windows, model routing, token budgets |
 
 </details>
 
@@ -317,11 +322,11 @@ src/
 │   ├── sidebar/            # Left sidebar (components, problems, learning path)
 │   └── ui/                 # shadcn/ui primitives
 ├── data/
-│   ├── components.ts       # 30 system components with verified specs
-│   ├── problems.ts         # 35 design problems with reference architectures
-│   ├── conceptLibrary.ts   # Educational content for all 30 components
-│   ├── interviewData.ts    # Requirements, APIs, data models for all 35 problems
-│   ├── tradeoffCards.ts    # 14 pre-built trade-off comparisons
+│   ├── components.ts       # 38 system components with verified specs
+│   ├── problems.ts         # 37 design problems with reference architectures
+│   ├── conceptLibrary.ts   # Educational content for all 38 components
+│   ├── interviewData.ts    # Requirements, APIs, data models for all 37 problems
+│   ├── tradeoffCards.ts    # 23 pre-built trade-off comparisons
 │   └── learningPath.ts     # 4-tier progression with prerequisites
 ├── engine/
 │   └── simulator.ts        # Traffic simulation (Kahn's topological sort)

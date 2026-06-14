@@ -84,7 +84,7 @@ export function scoreDesign(
       total: 0,
       categories: [],
       verdict: "Empty Canvas",
-      verdictColor: "text-zinc-500",
+      verdictColor: "text-muted-foreground",
       summary: "Add components to the canvas to get a score.",
     };
   }

@@ -711,4 +711,76 @@ export const TRADEOFF_CARDS: TradeoffCard[] = [
     whenToChooseA: "For global, latency-sensitive products that can resolve or avoid write conflicts (DynamoDB global tables, CRDT-based or region-pinned designs).",
     whenToChooseB: "For systems where consistency is paramount and an RTO of minutes is acceptable (classic primary/DR Postgres setups).",
   },
+  {
+    id: "rag-vs-finetuning",
+    title: "RAG vs Fine-Tuning",
+    optionA: {
+      name: "RAG (Retrieval Augmented Generation)",
+      pros: [
+        "Always uses up-to-date knowledge without retraining",
+        "Cheaper to update — just re-index new documents",
+        "Answers are grounded and citable from source documents",
+        "Works with proprietary/private data without model access",
+      ],
+      cons: [
+        "Retrieval quality is a bottleneck — bad chunks = bad answers",
+        "Adds latency (embed + search + generate)",
+        "Context window limits how much retrieved text fits",
+        "Complex pipeline: chunking, embedding, vector DB, reranking",
+      ],
+    },
+    optionB: {
+      name: "Fine-Tuning",
+      pros: [
+        "Model internalizes domain knowledge — no retrieval step needed",
+        "Lower inference latency (no vector search hop)",
+        "Better at style, format, and domain-specific reasoning patterns",
+        "Simpler runtime architecture (just call the model)",
+      ],
+      cons: [
+        "Knowledge becomes stale — must retrain for updates",
+        "Expensive to fine-tune and validate each iteration",
+        "Risk of hallucination without grounding/citations",
+        "Hard to audit where an answer came from",
+      ],
+    },
+    whenToChooseA: "When knowledge changes frequently (support docs, policies, wikis), you need citations, or you can't afford retraining cycles.",
+    whenToChooseB: "When you need consistent tone/format (customer support style), domain reasoning patterns, or knowledge is relatively static.",
+  },
+  {
+    id: "vector-vs-keyword",
+    title: "Vector Search vs Keyword Search",
+    optionA: {
+      name: "Vector Search (Semantic)",
+      pros: [
+        "Finds conceptually similar content even with different wording",
+        "Handles synonyms, paraphrasing, and cross-language queries",
+        "Essential for RAG, recommendations, and image similarity",
+        "Works well for natural-language queries",
+      ],
+      cons: [
+        "Approximate results — not exact match",
+        "Requires embedding model + vector DB infrastructure",
+        "Struggles with exact identifiers (SKUs, error codes, names)",
+        "Index build and re-embedding cost on model upgrades",
+      ],
+    },
+    optionB: {
+      name: "Keyword Search (BM25 / Inverted Index)",
+      pros: [
+        "Exact and predictable matching for known terms",
+        "Mature, fast, well-understood (Elasticsearch, Solr)",
+        "No ML infrastructure needed",
+        "Great for SKUs, error codes, proper nouns, boolean queries",
+      ],
+      cons: [
+        "Misses semantic similarity ('car' won't match 'automobile')",
+        "Requires careful tokenization and stemming",
+        "Poor for natural-language or conversational queries",
+        "No cross-language capability without translation layer",
+      ],
+    },
+    whenToChooseA: "For semantic search, RAG, recommendations, or when users query in natural language with varied phrasing.",
+    whenToChooseB: "For catalog search with SKUs, log search with error codes, or when exact term matching is required. (Hybrid search combining both is increasingly the default for production RAG.)",
+  },
 ];

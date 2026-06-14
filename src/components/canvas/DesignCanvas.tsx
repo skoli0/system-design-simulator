@@ -8,14 +8,22 @@ import {
   Background,
   BackgroundVariant,
   useReactFlow,
+  useUpdateNodeInternals,
   type Node,
   type Edge,
 } from "@xyflow/react";
+import {
+  CANVAS_FIT_VIEW_OPTIONS,
+  CANVAS_LAYOUT_SETTLE_MS,
+} from "@/lib/canvasFitView";
+import { useHasHydrated } from "@/store/hydration";
 import "@xyflow/react/dist/style.css";
 import { nodeTypes } from "./nodes/nodeTypes";
 import { edgeTypes } from "./edges/edgeTypes";
 import { useCanvasStore, type ComponentNodeData } from "@/store/canvasStore";
 import { usePenStore } from "@/store/penStore";
+import { useAppStore } from "@/store/appStore";
+import { useSimulationStore } from "@/store/simulationStore";
 import { getComponentById } from "@/data/components";
 import { BookOpen, GraduationCap, Layers, Lock, MousePointer2, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
@@ -42,7 +50,10 @@ interface DesignCanvasProps {
 
 export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview }: DesignCanvasProps = {}) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const canvasAreaRef = useRef<HTMLDivElement>(null);
+  const fitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { screenToFlowPosition, fitView } = useReactFlow();
+  const updateNodeInternals = useUpdateNodeInternals();
 
   const nodes = useCanvasStore((s) => s.nodes);
   const edges = useCanvasStore((s) => s.edges);
@@ -58,20 +69,95 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
   const isReadOnly = tabs.find((t) => t.id === activeTabId)?.readOnly === true;
   const penMode = usePenStore((s) => s.mode);
   const penActive = penMode !== "off";
+  const theme = useAppStore((s) => s.theme);
+  const leftSidebarOpen = useAppStore((s) => s.leftSidebarOpen);
+  const rightPanelOpen = useAppStore((s) => s.rightPanelOpen);
+  const hasHydrated = useHasHydrated();
+  const isDark = theme === "dark";
+  const trafficActive = useSimulationStore((s) => s.trafficActive);
+  const simRunning = useSimulationStore((s) => s.isRunning);
+  const simResult = useSimulationStore((s) => s.result);
 
-  // Re-fit the viewport whenever the user switches canvas tabs
+  // Recompute edge paths when simulation metrics change node dimensions.
+  useEffect(() => {
+    if (!trafficActive && !simRunning && !simResult) return;
+    const raf = requestAnimationFrame(() => {
+      for (const n of nodes) {
+        if (n.type !== "text") updateNodeInternals(n.id);
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [trafficActive, simRunning, simResult, nodes, updateNodeInternals]);
+
+  const runFitView = useCallback(() => {
+    if (nodes.length === 0) return;
+    requestAnimationFrame(() => {
+      fitView(CANVAS_FIT_VIEW_OPTIONS);
+    });
+  }, [fitView, nodes.length]);
+
+  const scheduleFitView = useCallback(
+    (delayMs = CANVAS_LAYOUT_SETTLE_MS) => {
+      if (fitTimerRef.current) clearTimeout(fitTimerRef.current);
+      fitTimerRef.current = setTimeout(runFitView, delayMs);
+    },
+    [runFitView]
+  );
+
+  // Re-fit when the canvas area resizes (panel collapse, window resize).
+  useEffect(() => {
+    const el = canvasAreaRef.current;
+    if (!el) return;
+
+    const ro = new ResizeObserver(() => {
+      scheduleFitView();
+    });
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      if (fitTimerRef.current) clearTimeout(fitTimerRef.current);
+    };
+  }, [scheduleFitView]);
+
+  // Re-fit after sidebar / right panel toggle once the slide animation finishes.
+  const prevPanelsRef = useRef({ left: leftSidebarOpen, right: rightPanelOpen });
+  useEffect(() => {
+    const prev = prevPanelsRef.current;
+    if (prev.left === leftSidebarOpen && prev.right === rightPanelOpen) return;
+    prevPanelsRef.current = { left: leftSidebarOpen, right: rightPanelOpen };
+    scheduleFitView();
+  }, [leftSidebarOpen, rightPanelOpen, scheduleFitView]);
+
+  // Re-fit once persisted nodes are available on first app open.
+  const openedFitRef = useRef(false);
+  useEffect(() => {
+    if (!hasHydrated || openedFitRef.current || nodes.length === 0) return;
+    openedFitRef.current = true;
+    scheduleFitView(CANVAS_LAYOUT_SETTLE_MS + 80);
+  }, [hasHydrated, nodes.length, scheduleFitView]);
+
+  // Re-fit the viewport when switching tabs or when nodes are loaded programmatically
   const initialTabRef = useRef(true);
   useEffect(() => {
     if (initialTabRef.current) {
       initialTabRef.current = false;
       return; // initial mount already handled by the `fitView` prop
     }
-    // Wait one frame so the new tab's nodes are mounted before fitting
-    const raf = requestAnimationFrame(() => {
-      fitView({ padding: 0.2, duration: 300 });
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [activeTabId, fitView]);
+    scheduleFitView(0);
+  }, [activeTabId, scheduleFitView]);
+
+  useEffect(() => {
+    if (nodes.length === 0) return;
+    scheduleFitView(0);
+  }, [nodes.length, scheduleFitView]);
+
+  useEffect(() => {
+    function handleFitView() {
+      runFitView();
+    }
+    window.addEventListener("canvas:fitview", handleFitView);
+    return () => window.removeEventListener("canvas:fitview", handleFitView);
+  }, [runFitView]);
 
   // Listen for text node edits and persist them to the store
   useEffect(() => {
@@ -161,11 +247,12 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
   const isEmpty = nodes.length === 0;
 
   return (
-    <div ref={reactFlowWrapper} className="relative flex-1 flex flex-col">
+    <div ref={reactFlowWrapper} className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <CanvasTabBar />
-      <div className="relative flex-1">
+      <div ref={canvasAreaRef} className="relative flex-1">
       <ReactFlow
-        className="h-full w-full bg-zinc-950"
+        key={activeTabId}
+        className="h-full w-full bg-muted/30 dark:bg-zinc-950"
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
@@ -180,6 +267,7 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
         edgeTypes={edgeTypes}
         defaultEdgeOptions={{ type: "animated" }}
         fitView
+        fitViewOptions={CANVAS_FIT_VIEW_OPTIONS}
         proOptions={{ hideAttribution: true }}
         panOnDrag={!penActive}
         zoomOnScroll={!penActive}
@@ -194,16 +282,15 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
           variant={BackgroundVariant.Dots}
           gap={20}
           size={1}
-          color="rgba(63, 63, 70, 0.5)"
-          className="!bg-zinc-950"
+          color={isDark ? "rgba(63, 63, 70, 0.5)" : "rgba(0, 0, 0, 0.10)"}
         />
         <Controls
-          className="!rounded-md !border !border-zinc-800 !bg-zinc-900 !shadow-sm [&>button]:!border-zinc-800 [&>button]:!bg-zinc-900 [&>button]:!text-zinc-400 [&>button:hover]:!bg-zinc-800 [&>button:hover]:!text-zinc-200"
+          className="!rounded-md !border !border-border !bg-card !shadow-sm [&>button]:!border-border [&>button]:!bg-card [&>button]:!text-muted-foreground [&>button:hover]:!bg-accent [&>button:hover]:!text-foreground"
           position="bottom-left"
         />
         <MiniMap
-          className="!hidden !rounded-md !border !border-zinc-800 !bg-zinc-900 md:!block"
-          maskColor="rgba(9, 9, 11, 0.7)"
+          className="!hidden !rounded-md !border !border-border !bg-card md:!block"
+          maskColor={isDark ? "rgba(9, 9, 11, 0.7)" : "rgba(255, 255, 255, 0.75)"}
           nodeColor={miniMapNodeColor}
           position="bottom-right"
           style={{ width: 140, height: 90 }}
@@ -215,7 +302,7 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
 
         {/* Read-only hint for reference tabs */}
         {isReadOnly && (
-          <div className="pointer-events-none absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-cyan-500/30 bg-zinc-900/90 px-3 py-1 text-[11px] font-medium text-cyan-400 shadow-sm backdrop-blur">
+          <div className="pointer-events-none absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-cyan-500/30 bg-card/90 px-3 py-1 text-[11px] font-medium text-cyan-400 shadow-sm backdrop-blur">
             <Lock className="h-3 w-3" />
             Read-only reference
           </div>
@@ -238,10 +325,10 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
               <Layers className="h-6 w-6 text-cyan-400" />
             </motion.div>
             <motion.div variants={emptyItem} className="space-y-1.5">
-              <h1 className="text-base font-semibold tracking-tight text-zinc-100 md:text-lg">
+              <h1 className="text-base font-semibold tracking-tight text-foreground md:text-lg">
                 Build an architecture that scales
               </h1>
-              <p className="mx-auto max-w-sm text-xs leading-relaxed text-zinc-400 md:text-sm">
+              <p className="mx-auto max-w-sm text-xs leading-relaxed text-muted-foreground md:text-sm">
                 Pick a problem, drop infrastructure components onto the canvas, and get scored the way an interviewer would evaluate you.
               </p>
             </motion.div>
@@ -268,19 +355,19 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
               />
             </motion.div>
 
-            <motion.div variants={emptyItem} className="hidden flex-wrap items-center justify-center gap-3 text-[11px] text-zinc-500 md:flex">
+            <motion.div variants={emptyItem} className="hidden flex-wrap items-center justify-center gap-3 text-[11px] text-muted-foreground md:flex">
               <span className="flex items-center gap-1.5">
                 <MousePointer2 className="h-3 w-3" />
                 Drag from the sidebar
               </span>
-              <span className="text-zinc-700">·</span>
+              <span className="text-muted-foreground/40">·</span>
               <span className="flex items-center gap-1">
-                <kbd className="rounded border border-zinc-700 bg-zinc-800 px-1.5 py-0.5 font-mono text-[10px]">⌘E</kbd>
+                <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px]">⌘E</kbd>
                 export
               </span>
-              <span className="text-zinc-700">·</span>
+              <span className="text-muted-foreground/40">·</span>
               <span className="flex items-center gap-1">
-                <kbd className="rounded border border-zinc-700 bg-zinc-800 px-1.5 py-0.5 font-mono text-[10px]">⌘↵</kbd>
+                <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px]">⌘↵</kbd>
                 simulate
               </span>
             </motion.div>
@@ -308,21 +395,21 @@ function QuickStartCard({
   return (
     <button
       onClick={onClick}
-      className={`group flex flex-col items-start gap-1.5 rounded-lg border bg-zinc-900/60 p-3 text-left transition-all hover:-translate-y-0.5 hover:bg-zinc-900 ${
+      className={`group flex flex-col items-start gap-1.5 rounded-lg border bg-card/60 p-3 text-left transition-all hover:-translate-y-0.5 hover:bg-card ${
         accent
           ? "border-cyan-500/30 hover:border-cyan-400/60 hover:shadow-[0_0_24px_-8px_rgba(6,182,212,0.5)]"
-          : "border-zinc-800 hover:border-zinc-700"
+          : "border-border hover:border-border"
       }`}
     >
       <span
         className={`flex h-6 w-6 items-center justify-center rounded-md ${
-          accent ? "bg-cyan-500/15 text-cyan-400" : "bg-zinc-800 text-zinc-400 group-hover:text-zinc-200"
+          accent ? "bg-cyan-500/15 text-cyan-400" : "bg-muted text-muted-foreground group-hover:text-foreground"
         }`}
       >
         {icon}
       </span>
-      <span className="text-xs font-medium text-zinc-200">{title}</span>
-      <span className="text-[11px] leading-tight text-zinc-500">{hint}</span>
+      <span className="text-xs font-medium text-foreground">{title}</span>
+      <span className="text-[11px] leading-tight text-muted-foreground">{hint}</span>
     </button>
   );
 }

@@ -61,7 +61,11 @@ function strokeToPath(points: [number, number][], size: number): string {
 
 /* ---------- export geometry ---------- */
 
-const BG_COLOR = "#18181b"; // zinc-900 — the app is dark-only
+function getExportBgColor(): string {
+  if (typeof window === "undefined") return "#ffffff";
+  const isDark = document.documentElement.classList.contains("dark");
+  return isDark ? "#18181b" : "#ffffff";
+}
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 2;
 const PADDING = 0.1;
@@ -156,7 +160,7 @@ export async function exportAsPng(problemName: string): Promise<void> {
   const filename = `${slugify(problemName)}-hld-${getTimestamp()}.png`;
 
   const options = {
-    backgroundColor: BG_COLOR,
+    backgroundColor: getExportBgColor(),
     pixelRatio: PIXEL_RATIO,
     width: geom.imageWidth,
     height: geom.imageHeight,
@@ -214,7 +218,7 @@ export async function exportAsSvg(problemName: string): Promise<void> {
   // (a foreignObject wrapper) is not reliably correct. The PNG export
   // includes them.
   const dataUrl = await toSvg(viewportEl, {
-    backgroundColor: BG_COLOR,
+    backgroundColor: getExportBgColor(),
     width: geom.imageWidth,
     height: geom.imageHeight,
     style: captureStyle(geom),
@@ -234,12 +238,19 @@ export function exportAsJSON(
   // (LoadDialog import + saved-design export) accept both files.
   const payload = JSON.stringify(
     {
-      schemaVersion: 1,
+      schemaVersion: 2,
       name: problemName,
-      problemId: useAppStore.getState().selectedProblemId ?? null,
-      nodes: serializeNodes(nodes),
-      edges: serializeEdges(edges),
-      strokes,
+      currentVersion: 1,
+      versions: [
+        {
+          version: 1,
+          savedAt: new Date().toISOString(),
+          problemId: useAppStore.getState().selectedProblemId ?? null,
+          nodes: serializeNodes(nodes),
+          edges: serializeEdges(edges),
+          strokes,
+        },
+      ],
     },
     null,
     2

@@ -7,6 +7,7 @@ import { ChevronDown, ChevronRight, Star } from "lucide-react";
 import { LEARNING_PATH, PROBLEM_CONCEPTS } from "@/data/learningPath";
 import { PROBLEMS } from "@/data/problems";
 import { useAppStore } from "@/store/appStore";
+import { selectProblemWithReference } from "@/lib/loadReference";
 
 const STORAGE_KEY = "sds-completed-problems";
 
@@ -43,7 +44,6 @@ function getConceptsForProblem(problemId: string): string[] {
 
 export function LearningPath() {
   const selectedProblemId = useAppStore((s) => s.selectedProblemId);
-  const setSelectedProblem = useAppStore((s) => s.setSelectedProblem);
   const [expandedTiers, setExpandedTiers] = useState<Set<string>>(new Set(["Foundations"]));
   const [completed, setCompleted] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
@@ -111,25 +111,25 @@ export function LearningPath() {
               {/* Tier header */}
               <button
                 onClick={() => toggleTier(tier.name)}
-                className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-zinc-800"
+                className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-muted"
               >
                 {isExpanded ? (
-                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 ) : (
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <span className={`text-xs font-semibold ${TIER_COLORS[tier.name] ?? "text-zinc-300"}`}>
+                    <span className={`text-xs font-semibold ${TIER_COLORS[tier.name] ?? "text-foreground/80"}`}>
                       {tier.name}
                     </span>
-                    <span className="text-[10px] text-zinc-400">
+                    <span className="text-[10px] text-muted-foreground">
                       {completedCount}/{totalCount}
                     </span>
                   </div>
-                  <p className="text-[10px] text-zinc-400 mt-0.5">{tier.description}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{tier.description}</p>
                   {/* Progress bar */}
-                  <div className="mt-1.5 h-1 w-full rounded-full bg-zinc-700">
+                  <div className="mt-1.5 h-1 w-full rounded-full bg-accent">
                     <div
                       className={`h-1 rounded-full transition-all ${TIER_BAR_COLORS[tier.name] ?? "bg-cyan-500"}`}
                       style={{ width: `${progressPct}%` }}
@@ -154,14 +154,14 @@ export function LearningPath() {
                         key={pid}
                         role="button"
                         tabIndex={0}
-                        onClick={() => setSelectedProblem(pid)}
-                        onKeyDown={(e) => { if (e.key === "Enter") setSelectedProblem(pid); }}
+                        onClick={() => selectProblemWithReference(pid)}
+                        onKeyDown={(e) => { if (e.key === "Enter") selectProblemWithReference(pid); }}
                         className={`flex w-full cursor-pointer flex-col gap-1 rounded-md px-2.5 py-2 text-left transition-colors ${
                           isSelected
-                            ? "border border-zinc-700 bg-zinc-800"
+                            ? "border border-border bg-muted"
                             : isRecommended
                               ? "border border-cyan-800/50 bg-cyan-900/10 hover:bg-cyan-900/20"
-                              : "border border-transparent hover:bg-zinc-800"
+                              : "border border-transparent hover:bg-muted"
                         }`}
                       >
                         <div className="flex items-center justify-between gap-1">
@@ -174,11 +174,11 @@ export function LearningPath() {
                               className={`h-3.5 w-3.5 shrink-0 rounded border transition-colors ${
                                 isCompleted
                                   ? "border-cyan-500 bg-cyan-500"
-                                  : "border-zinc-600 hover:border-zinc-400"
+                                  : "border-border hover:border-muted-foreground"
                               }`}
                             >
                               {isCompleted && (
-                                <svg viewBox="0 0 14 14" className="h-full w-full text-zinc-900">
+                                <svg viewBox="0 0 14 14" className="h-full w-full text-foreground">
                                   <path
                                     d="M3 7l3 3 5-5"
                                     fill="none"
@@ -193,10 +193,10 @@ export function LearningPath() {
                             <span
                               className={`text-xs font-medium truncate ${
                                 isCompleted
-                                  ? "text-zinc-500 line-through"
+                                  ? "text-muted-foreground line-through"
                                   : isSelected
                                     ? "text-cyan-500"
-                                    : "text-zinc-300"
+                                    : "text-foreground/80"
                               }`}
                             >
                               {problem.title}
@@ -217,7 +217,7 @@ export function LearningPath() {
                             {concepts.map((c) => (
                               <span
                                 key={c}
-                                className="rounded bg-zinc-800 px-1 py-0.5 text-[10px] text-zinc-400"
+                                className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground"
                               >
                                 {c}
                               </span>

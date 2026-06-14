@@ -95,10 +95,15 @@ export function runSimulation(
       (!hasEdges || (adjacency.get(n.id)?.length ?? 0) > 0)
   );
 
+  // When a Users/Client node exists, it is the sole traffic source.
+  const clientEntries = entryNodes.filter((n) => n.data.componentId === "client");
+  const trafficEntries = clientEntries.length > 0 ? clientEntries : entryNodes;
+
   // Initialize incoming QPS for entry nodes
   const incomingQPS = new Map<string, number>();
-  const qpsPerEntry = entryNodes.length > 0 ? requestsPerSec / entryNodes.length : 0;
-  for (const entry of entryNodes) {
+  const qpsPerEntry =
+    trafficEntries.length > 0 ? requestsPerSec / trafficEntries.length : 0;
+  for (const entry of trafficEntries) {
     incomingQPS.set(entry.id, qpsPerEntry);
   }
 
@@ -152,7 +157,7 @@ export function runSimulation(
   // --- Kahn's algorithm for topological-order QPS propagation ---
   // Clone inDegree so we can decrement without corrupting the original
   const remaining = new Map(inDegree);
-  const queue: string[] = entryNodes.map((n) => n.id);
+  const queue: string[] = trafficEntries.map((n) => n.id);
   let head = 0;
 
   while (head < queue.length) {

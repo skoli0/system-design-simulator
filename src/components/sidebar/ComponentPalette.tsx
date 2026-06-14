@@ -68,7 +68,11 @@ export function ComponentPalette({ onCreateCustomComponent, onComponentAdded }: 
     e.dataTransfer.effectAllowed = "copy";
 
     const ghost = document.createElement("div");
-    ghost.style.cssText = "position:absolute;top:-1000px;left:-1000px;padding:6px 12px;background:#18181b;border:1px solid #3f3f46;border-radius:8px;color:#e4e4e7;font-size:12px;font-family:system-ui;white-space:nowrap;";
+    const style = getComputedStyle(document.documentElement);
+    const bg = style.getPropertyValue("--card").trim() || (document.documentElement.classList.contains("dark") ? "#18181b" : "#ffffff");
+    const border = style.getPropertyValue("--border").trim() || "#3f3f46";
+    const fg = style.getPropertyValue("--foreground").trim() || "#e4e4e7";
+    ghost.style.cssText = `position:absolute;top:-1000px;left:-1000px;padding:6px 12px;background:${bg};border:1px solid ${border};border-radius:8px;color:${fg};font-size:12px;font-family:system-ui;white-space:nowrap;`;
     const comp = allComponents.find((c) => c.id === componentId);
     ghost.textContent = comp?.label ?? componentId;
     document.body.appendChild(ghost);
@@ -136,18 +140,18 @@ export function ComponentPalette({ onCreateCustomComponent, onComponentAdded }: 
     <div className="flex h-full flex-col">
       <div className="shrink-0 px-3 pt-3 pb-2">
         <div className="relative">
-          <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
+          <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
             type="text"
             aria-label="Search components"
             placeholder="Search components..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-md border border-zinc-700 bg-zinc-800 py-2 pl-8 pr-3 text-xs text-zinc-200 placeholder:text-zinc-500 outline-none transition-colors focus:border-cyan-500"
+            className="w-full rounded-md border border-border bg-muted py-2 pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-cyan-500"
           />
         </div>
         {query && (
-          <p className="mt-1.5 text-[10px] text-zinc-400">
+          <p className="mt-1.5 text-[10px] text-muted-foreground">
             {totalMatches === 0
               ? "No matches"
               : `${totalMatches} component${totalMatches === 1 ? "" : "s"} match "${search}"`}
@@ -159,11 +163,11 @@ export function ComponentPalette({ onCreateCustomComponent, onComponentAdded }: 
         {onCreateCustomComponent && (
           <button
             onClick={onCreateCustomComponent}
-            className="group flex w-full items-center gap-2 rounded-md border border-dashed border-zinc-700 bg-zinc-800/40 px-2.5 py-2 text-xs text-zinc-300 transition-colors hover:border-cyan-500/50 hover:bg-zinc-800 hover:text-cyan-300"
+            className="group flex w-full items-center gap-2 rounded-md border border-dashed border-border bg-muted/40 px-2.5 py-2 text-xs text-foreground/80 transition-colors hover:border-cyan-500/50 hover:bg-muted hover:text-cyan-300"
           >
             <Sparkles className="h-3.5 w-3.5 shrink-0 text-cyan-400" />
             <span className="flex-1 text-left">Create custom component</span>
-            <Plus className="h-3 w-3 shrink-0 text-zinc-500 group-hover:text-cyan-400" />
+            <Plus className="h-3 w-3 shrink-0 text-muted-foreground group-hover:text-cyan-400" />
           </button>
         )}
         {COMPONENT_CATEGORIES.map((cat) => {
@@ -174,13 +178,13 @@ export function ComponentPalette({ onCreateCustomComponent, onComponentAdded }: 
           return (
             <div key={cat.key}>
               <div className="mb-2 flex items-center gap-2">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-500">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                   {cat.label}
                 </p>
-                <span className="flex h-4 min-w-4 items-center justify-center rounded bg-zinc-800 px-1 text-[10px] font-medium tabular-nums text-zinc-500">
+                <span className="flex h-4 min-w-4 items-center justify-center rounded bg-muted px-1 text-[10px] font-medium tabular-nums text-muted-foreground">
                   {items.length}
                 </span>
-                <div className="h-px flex-1 bg-zinc-800" />
+                <div className="h-px flex-1 bg-muted" />
               </div>
               <TooltipProvider>
               <div className="space-y-0.5">
@@ -201,9 +205,9 @@ export function ComponentPalette({ onCreateCustomComponent, onComponentAdded }: 
                             onDragStart={(e) => handleDragStart(e, item.id)}
                             // Touch devices can't drag-and-drop: tapping the row adds the component
                             onClick={isCoarse ? () => handleQuickAdd(item.id) : undefined}
-                            className={`group flex cursor-grab items-center gap-2 rounded-md border-l-2 px-2 py-2 text-xs text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200 active:cursor-grabbing ${borderColor}`}
+                            className={`group flex cursor-grab items-center gap-2 rounded-md border-l-2 px-2 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:cursor-grabbing ${borderColor}`}
                           >
-                            <GripVertical className="h-3 w-3 shrink-0 text-zinc-600 opacity-0 transition-opacity group-hover:opacity-100" />
+                            <GripVertical className="h-3 w-3 shrink-0 text-muted-foreground/60 opacity-0 transition-opacity group-hover:opacity-100" />
                             <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${iconBg}`}>
                               <Icon className={`h-3.5 w-3.5 shrink-0 transition-colors ${accent}`} />
                             </div>
@@ -213,7 +217,7 @@ export function ComponentPalette({ onCreateCustomComponent, onComponentAdded }: 
                                 Custom
                               </span>
                             )}
-                            <span className="shrink-0 text-[11px] text-zinc-400">
+                            <span className="shrink-0 text-[11px] text-muted-foreground">
                               {item.maxQPS === Infinity ? "\u221e" : `${(item.maxQPS / 1000).toFixed(0)}k`}
                             </span>
                             <button
@@ -221,7 +225,7 @@ export function ComponentPalette({ onCreateCustomComponent, onComponentAdded }: 
                                 e.stopPropagation();
                                 handleQuickAdd(item.id);
                               }}
-                              className={`flex ${isCoarse ? "h-9 w-9" : "h-5 w-5"} shrink-0 items-center justify-center rounded text-zinc-500 opacity-60 transition-all hover:bg-zinc-700 hover:text-cyan-400 hover:opacity-100 group-focus-within:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100`}
+                              className={`flex ${isCoarse ? "h-9 w-9" : "h-5 w-5"} shrink-0 items-center justify-center rounded text-muted-foreground opacity-60 transition-all hover:bg-accent hover:text-cyan-400 hover:opacity-100 group-focus-within:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100`}
                               title="Add to canvas"
                               aria-label={`Add ${item.label} to canvas`}
                             >
@@ -230,7 +234,7 @@ export function ComponentPalette({ onCreateCustomComponent, onComponentAdded }: 
                             {isCustom && (
                               <button
                                 onClick={(e) => handleDeleteCustom(e, item.id, item.label)}
-                                className={`flex ${isCoarse ? "h-9 w-9" : "h-5 w-5"} shrink-0 items-center justify-center rounded text-zinc-500 opacity-60 transition-all hover:bg-zinc-700 hover:text-rose-400 hover:opacity-100 group-focus-within:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100`}
+                                className={`flex ${isCoarse ? "h-9 w-9" : "h-5 w-5"} shrink-0 items-center justify-center rounded text-muted-foreground opacity-60 transition-all hover:bg-accent hover:text-rose-400 hover:opacity-100 group-focus-within:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100`}
                                 title="Delete custom component"
                                 aria-label={`Delete ${item.label}`}
                               >

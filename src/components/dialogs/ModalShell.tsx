@@ -16,7 +16,7 @@ interface ModalShellProps {
   ariaLabel?: string;
   /**
    * When false, the panel renders without the default chrome
-   * (rounded-lg border bg-zinc-900 shadow) so callers can fully restyle it.
+   * (rounded-lg border bg-card shadow) so callers can fully restyle it.
    */
   chrome?: boolean;
 }
@@ -126,7 +126,7 @@ export function ModalShell({
         aria-label={ariaLabel}
         tabIndex={-1}
         className={`relative z-10 max-h-[85dvh] w-full overflow-y-auto outline-none ${
-          chrome ? "rounded-lg border border-zinc-800 bg-zinc-900 shadow-lg" : ""
+          chrome ? "rounded-lg border border-border bg-card shadow-lg" : ""
         } ${panelClassName}`}
       >
         {children}

@@ -28,22 +28,22 @@ function SidebarTabs({
   const setActiveLeftTab = useAppStore((s) => s.setActiveLeftTab);
   return (
     <Tabs value={activeLeftTab} onValueChange={(v) => setActiveLeftTab(v as typeof activeLeftTab)} className="flex flex-1 flex-col min-h-0">
-      <TabsList className="mx-2 mt-2 h-9 w-auto shrink-0 bg-zinc-800">
+      <TabsList className="mx-2 mt-2 h-9 w-auto shrink-0 bg-muted">
         <TabsTrigger
           value="components"
-          className="h-7 px-3 text-xs data-[state=active]:bg-zinc-700 data-[state=active]:text-zinc-100"
+          className="h-7 px-3 text-xs data-[state=active]:bg-accent data-[state=active]:text-foreground"
         >
           Components
         </TabsTrigger>
         <TabsTrigger
           value="problems"
-          className="h-7 px-3 text-xs data-[state=active]:bg-zinc-700 data-[state=active]:text-zinc-100"
+          className="h-7 px-3 text-xs data-[state=active]:bg-accent data-[state=active]:text-foreground"
         >
           Problems
         </TabsTrigger>
         <TabsTrigger
           value="learn"
-          className="h-7 px-3 text-xs data-[state=active]:bg-zinc-700 data-[state=active]:text-zinc-100"
+          className="h-7 px-3 text-xs data-[state=active]:bg-accent data-[state=active]:text-foreground"
         >
           Learn
         </TabsTrigger>
@@ -76,7 +76,7 @@ export function Sidebar({
 }: SidebarProps) {
   if (variant === "mobile") {
     return (
-      <div className="flex h-full w-full flex-col bg-zinc-900">
+      <div className="flex h-full w-full flex-col bg-card">
         <SidebarTabs
           onCreateProblem={onCreateProblem}
           onCreateCustomComponent={onCreateCustomComponent}
@@ -88,7 +88,7 @@ export function Sidebar({
 
   return (
     <aside
-      className={`hidden shrink-0 flex-col border-r border-zinc-800 bg-zinc-900 overflow-hidden transition-all duration-200 md:flex ${
+      className={`hidden shrink-0 flex-col border-r border-border bg-card overflow-hidden transition-all duration-200 md:flex ${
         open ? "w-[280px] opacity-100" : "w-0 opacity-0 border-r-0"
       }`}
       aria-hidden={!open || undefined}

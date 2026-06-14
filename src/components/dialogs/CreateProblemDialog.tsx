@@ -94,7 +94,7 @@ export function CreateProblemDialog({ open, onClose }: CreateProblemDialogProps)
   };
 
   const inputClass =
-    "w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-xs text-zinc-100 placeholder-zinc-500 outline-none focus:border-cyan-500";
+    "w-full rounded-md border border-border bg-muted px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-cyan-500";
 
   return (
     <>
@@ -105,10 +105,10 @@ export function CreateProblemDialog({ open, onClose }: CreateProblemDialogProps)
       ariaLabel="Create custom problem"
     >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-zinc-100">Create Custom Problem</h2>
+          <h2 className="text-sm font-semibold text-foreground">Create Custom Problem</h2>
           <button
             onClick={onClose}
-            className="flex h-6 w-6 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+            className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground/80"
             aria-label="Close"
           >
             <X className="h-4 w-4" />
@@ -118,7 +118,7 @@ export function CreateProblemDialog({ open, onClose }: CreateProblemDialogProps)
         <div className="space-y-3">
           {/* Title */}
           <div>
-            <label className="mb-1 block text-xs text-zinc-400">Title *</label>
+            <label className="mb-1 block text-xs text-muted-foreground">Title *</label>
             <input
               type="text"
               value={title}
@@ -131,7 +131,7 @@ export function CreateProblemDialog({ open, onClose }: CreateProblemDialogProps)
 
           {/* Difficulty */}
           <div>
-            <label className="mb-1 block text-xs text-zinc-400">Difficulty</label>
+            <label className="mb-1 block text-xs text-muted-foreground">Difficulty</label>
             <div className="flex gap-1">
               {DIFFICULTIES.map((d) => (
                 <button
@@ -144,7 +144,7 @@ export function CreateProblemDialog({ open, onClose }: CreateProblemDialogProps)
                         : d === "Medium"
                           ? "bg-amber-600/20 text-amber-400 border border-amber-500/30"
                           : "bg-rose-600/20 text-rose-400 border border-rose-500/30"
-                      : "bg-zinc-800 text-zinc-400 border border-zinc-700 hover:bg-zinc-700"
+                      : "bg-muted text-muted-foreground border border-border hover:bg-accent"
                   }`}
                 >
                   {d}
@@ -155,7 +155,7 @@ export function CreateProblemDialog({ open, onClose }: CreateProblemDialogProps)
 
           {/* Description */}
           <div>
-            <label className="mb-1 block text-xs text-zinc-400">Description</label>
+            <label className="mb-1 block text-xs text-muted-foreground">Description</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -167,10 +167,10 @@ export function CreateProblemDialog({ open, onClose }: CreateProblemDialogProps)
 
           {/* Requirements */}
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-zinc-300">Requirements</label>
+            <label className="mb-1.5 block text-xs font-medium text-foreground/80">Requirements</label>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="mb-0.5 block text-[11px] text-zinc-500">Reads/sec</label>
+                <label className="mb-0.5 block text-[11px] text-muted-foreground">Reads/sec</label>
                 <input
                   type="number"
                   value={readsPerSec}
@@ -179,7 +179,7 @@ export function CreateProblemDialog({ open, onClose }: CreateProblemDialogProps)
                 />
               </div>
               <div>
-                <label className="mb-0.5 block text-[11px] text-zinc-500">Writes/sec</label>
+                <label className="mb-0.5 block text-[11px] text-muted-foreground">Writes/sec</label>
                 <input
                   type="number"
                   value={writesPerSec}
@@ -188,7 +188,7 @@ export function CreateProblemDialog({ open, onClose }: CreateProblemDialogProps)
                 />
               </div>
               <div>
-                <label className="mb-0.5 block text-[11px] text-zinc-500">Storage (GB)</label>
+                <label className="mb-0.5 block text-[11px] text-muted-foreground">Storage (GB)</label>
                 <input
                   type="number"
                   value={storageGB}
@@ -197,7 +197,7 @@ export function CreateProblemDialog({ open, onClose }: CreateProblemDialogProps)
                 />
               </div>
               <div>
-                <label className="mb-0.5 block text-[11px] text-zinc-500">Latency SLA (ms)</label>
+                <label className="mb-0.5 block text-[11px] text-muted-foreground">Latency SLA (ms)</label>
                 <input
                   type="number"
                   value={latencyMs}
@@ -206,7 +206,7 @@ export function CreateProblemDialog({ open, onClose }: CreateProblemDialogProps)
                 />
               </div>
               <div className="col-span-2">
-                <label className="mb-0.5 block text-[11px] text-zinc-500">Users</label>
+                <label className="mb-0.5 block text-[11px] text-muted-foreground">Users</label>
                 <input
                   type="text"
                   value={users}
@@ -220,7 +220,7 @@ export function CreateProblemDialog({ open, onClose }: CreateProblemDialogProps)
 
           {/* Constraints */}
           <div>
-            <label className="mb-1 block text-xs text-zinc-400">Constraints</label>
+            <label className="mb-1 block text-xs text-muted-foreground">Constraints</label>
             <textarea
               value={constraintsText}
               onChange={(e) => setConstraintsText(e.target.value)}
@@ -232,7 +232,7 @@ export function CreateProblemDialog({ open, onClose }: CreateProblemDialogProps)
 
           {/* Tags */}
           <div>
-            <label className="mb-1 block text-xs text-zinc-400">Tags</label>
+            <label className="mb-1 block text-xs text-muted-foreground">Tags</label>
             <input
               type="text"
               value={tagsText}
@@ -247,7 +247,7 @@ export function CreateProblemDialog({ open, onClose }: CreateProblemDialogProps)
         <div className="mt-4 flex justify-end gap-2">
           <button
             onClick={onClose}
-            className="rounded-md px-3 py-1.5 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+            className="rounded-md px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             Cancel
           </button>

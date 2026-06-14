@@ -1,5 +1,6 @@
 import type { Problem } from "@/types/problem";
 import { useCustomProblemsStore } from "@/store/customProblemsStore";
+import { REFERENCE_ARCHITECTURES } from "./referenceArchitectures";
 
 export const PROBLEMS: Problem[] = [
   {
@@ -2597,7 +2598,185 @@ export const PROBLEMS: Problem[] = [
     },
     tags: ["Pipeline", "Deployment", "Orchestration", "Caching"],
   },
+  {
+    id: "rag-qa-system",
+    title: "RAG Q&A System",
+    difficulty: "Hard",
+    description:
+      "Design a Retrieval-Augmented Generation (RAG) system that lets users ask natural-language questions against a large document corpus (policies, manuals, wikis) and receive grounded, cited answers. The system must ingest documents, chunk and embed them, retrieve the most relevant passages via vector search, and pass them as context to an LLM for answer generation. Enterprise RAG systems like Glean and Notion AI handle millions of documents with sub-5-second query latency — the key challenges are chunking quality, hybrid retrieval (vector + keyword), hallucination prevention via citation, and keeping the knowledge base fresh as documents change.",
+    requirements: {
+      readsPerSec: 5000,
+      writesPerSec: 500,
+      storageGB: 50000,
+      latencyMs: 5000,
+      users: "50M documents, 10M DAU",
+    },
+    constraints: [
+      "End-to-end query latency < 5s at p95 (embed query → retrieve → generate)",
+      "Answers must include citations linking back to source document passages",
+      "Support incremental document ingestion without full re-index downtime",
+      "Hybrid retrieval: combine vector similarity with keyword (BM25) for best recall",
+      "Handle document updates and deletions — stale embeddings must be purged",
+      "Multi-tenant isolation: users only retrieve documents they have access to",
+      "Rate limiting and token budgets per user to control LLM inference costs",
+    ],
+    hints: [
+      {
+        title: "Ingestion pipeline",
+        content:
+          "Document upload → object storage → message queue → chunking worker → embedding service (batch) → vector DB + metadata in search DB. Make ingestion async — users shouldn't wait for indexing to complete.",
+      },
+      {
+        title: "Chunking strategy",
+        content:
+          "Fixed 512-token chunks with 50-token overlap is a good starting point. For structured docs (PDFs with headings), use semantic chunking that respects section boundaries. Poor chunking is the #1 cause of bad RAG answers.",
+      },
+      {
+        title: "Query path",
+        content:
+          "User query → API gateway → app server → embed query (online) → vector DB ANN search + Elasticsearch BM25 → merge/rerank top-k chunks → LLM gateway with prompt template → stream response with citations.",
+      },
+      {
+        title: "Preventing hallucination",
+        content:
+          "Use a strict system prompt: 'Answer ONLY from the provided context. If unsure, say you don't know.' Include chunk IDs in the prompt and map them to citations in the response. Log retrieval scores to detect low-confidence answers.",
+      },
+      {
+        title: "Advanced: Re-ranking",
+        content:
+          "After initial retrieval (top-20), use a cross-encoder reranker model to rescore chunks by relevance to the query. This improves precision at the cost of ~100ms extra latency but dramatically reduces irrelevant context in the LLM prompt.",
+      },
+    ],
+    referenceSolution: {
+      nodes: [
+        { componentId: "dns", x: 100, y: 250 },
+        { componentId: "load-balancer", x: 250, y: 250 },
+        { componentId: "api-gateway", x: 400, y: 250 },
+        { componentId: "rate-limiter", x: 400, y: 420 },
+        { componentId: "auth-service", x: 400, y: 80 },
+        { componentId: "app-server", x: 580, y: 250 },
+        { componentId: "cache", x: 580, y: 80 },
+        { componentId: "embedding-service", x: 580, y: 420 },
+        { componentId: "llm-gateway", x: 760, y: 250 },
+        { componentId: "vector-db", x: 760, y: 80 },
+        { componentId: "search", x: 760, y: 420 },
+        { componentId: "object-storage", x: 940, y: 80 },
+        { componentId: "message-queue", x: 940, y: 420 },
+        { componentId: "monitoring", x: 940, y: 250 },
+      ],
+      edges: [
+        { source: "dns", target: "load-balancer" },
+        { source: "load-balancer", target: "api-gateway" },
+        { source: "api-gateway", target: "rate-limiter" },
+        { source: "api-gateway", target: "auth-service" },
+        { source: "rate-limiter", target: "app-server" },
+        { source: "app-server", target: "cache" },
+        { source: "app-server", target: "embedding-service" },
+        { source: "app-server", target: "llm-gateway" },
+        { source: "app-server", target: "vector-db" },
+        { source: "app-server", target: "search" },
+        { source: "app-server", target: "monitoring" },
+        { source: "message-queue", target: "embedding-service" },
+        { source: "embedding-service", target: "vector-db" },
+        { source: "object-storage", target: "message-queue" },
+      ],
+    },
+    tags: ["AI", "RAG", "Vector Search", "LLM"],
+  },
+  {
+    id: "ai-chat-assistant",
+    title: "AI Chat Assistant",
+    difficulty: "Hard",
+    description:
+      "Design a conversational AI assistant like ChatGPT or Claude. Users send multi-turn messages and receive streaming LLM responses with conversation history, tool/function calling, and optional web search or document retrieval. ChatGPT serves hundreds of millions of users with responses streamed token-by-token — the key challenges are managing long conversation context windows, controlling inference costs via model routing, handling concurrent streaming connections, and persisting conversation state across sessions and devices.",
+    requirements: {
+      readsPerSec: 50000,
+      writesPerSec: 10000,
+      storageGB: 100000,
+      latencyMs: 3000,
+      users: "100M DAU",
+    },
+    constraints: [
+      "First-token latency < 500ms at p95 via streaming (SSE/WebSocket)",
+      "Support multi-turn conversations with context window management (summarize/truncate older turns)",
+      "Per-user rate limits and token budgets to prevent cost abuse",
+      "Conversation history persisted and synced across devices",
+      "Optional tool calling: web search, code execution, file upload analysis",
+      "Content moderation on both user input and model output",
+      "Graceful degradation when LLM provider is rate-limited — queue or fallback model",
+    ],
+    hints: [
+      {
+        title: "Streaming architecture",
+        content:
+          "Use WebSocket or SSE from client → API gateway → app server → LLM gateway. Stream tokens as they're generated. The LLM gateway handles the provider SSE connection and forwards chunks to the client.",
+      },
+      {
+        title: "Context management",
+        content:
+          "Store full conversation in NoSQL. Before each LLM call, assemble context: system prompt + last N turns + optional RAG chunks. When context exceeds the model's window, summarize older turns or use a sliding window.",
+      },
+      {
+        title: "Cost control",
+        content:
+          "Route simple queries to cheaper models (GPT-4o-mini, Haiku). Cache identical system prompts. Track token usage per user in Redis with daily budgets. Rate limit at the API gateway (e.g., 20 messages/min free tier).",
+      },
+      {
+        title: "Conversation storage",
+        content:
+          "NoSQL for conversation metadata and message list. Object storage for uploaded files/images. Cache recent conversations in Redis for fast load. Use message queue for async tasks: moderation, summarization, analytics.",
+      },
+      {
+        title: "Advanced: Tool calling",
+        content:
+          "LLM returns structured tool_call JSON → app server executes (web search API, code sandbox) → feeds result back to LLM for final answer. Each tool is a separate service behind circuit breakers with timeouts.",
+      },
+    ],
+    referenceSolution: {
+      nodes: [
+        { componentId: "dns", x: 100, y: 250 },
+        { componentId: "cdn", x: 250, y: 80 },
+        { componentId: "load-balancer", x: 250, y: 250 },
+        { componentId: "api-gateway", x: 400, y: 250 },
+        { componentId: "rate-limiter", x: 400, y: 420 },
+        { componentId: "auth-service", x: 400, y: 80 },
+        { componentId: "websocket-server", x: 580, y: 250 },
+        { componentId: "app-server", x: 580, y: 420 },
+        { componentId: "cache", x: 580, y: 80 },
+        { componentId: "llm-gateway", x: 760, y: 250 },
+        { componentId: "nosql-db", x: 760, y: 80 },
+        { componentId: "object-storage", x: 760, y: 420 },
+        { componentId: "message-queue", x: 940, y: 250 },
+        { componentId: "monitoring", x: 940, y: 80 },
+        { componentId: "circuit-breaker", x: 940, y: 420 },
+      ],
+      edges: [
+        { source: "dns", target: "load-balancer" },
+        { source: "dns", target: "cdn" },
+        { source: "load-balancer", target: "api-gateway" },
+        { source: "api-gateway", target: "rate-limiter" },
+        { source: "api-gateway", target: "auth-service" },
+        { source: "rate-limiter", target: "websocket-server" },
+        { source: "rate-limiter", target: "app-server" },
+        { source: "websocket-server", target: "llm-gateway" },
+        { source: "app-server", target: "cache" },
+        { source: "app-server", target: "llm-gateway" },
+        { source: "app-server", target: "nosql-db" },
+        { source: "app-server", target: "object-storage" },
+        { source: "app-server", target: "message-queue" },
+        { source: "llm-gateway", target: "circuit-breaker" },
+        { source: "app-server", target: "monitoring" },
+      ],
+    },
+    tags: ["AI", "LLM", "Streaming", "Chat"],
+  },
 ];
+
+// Overlay modern reference architectures (12–20 components each)
+for (const problem of PROBLEMS) {
+  const ref = REFERENCE_ARCHITECTURES[problem.id];
+  if (ref) problem.referenceSolution = ref;
+}
 
 export function getProblemById(id: string): Problem | undefined {
   // Check predefined problems first

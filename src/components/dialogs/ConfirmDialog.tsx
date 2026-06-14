@@ -33,23 +33,23 @@ export function ConfirmDialog({
       <div className="mb-4 flex items-start justify-between">
         <div className="flex items-center gap-2">
           {danger && <AlertTriangle className="h-4 w-4 text-rose-400" />}
-          <h2 className="text-sm font-semibold text-zinc-100">{title}</h2>
+          <h2 className="text-sm font-semibold text-foreground">{title}</h2>
         </div>
         <button
           onClick={onClose}
-          className="flex h-6 w-6 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+          className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground/80"
           aria-label="Close"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      <p className="mb-5 text-xs leading-relaxed text-zinc-400">{message}</p>
+      <p className="mb-5 text-xs leading-relaxed text-muted-foreground">{message}</p>
 
       <div className="flex justify-end gap-2">
         <button
           onClick={onClose}
-          className="rounded-md px-3 py-1.5 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+          className="rounded-md px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           {cancelText}
         </button>

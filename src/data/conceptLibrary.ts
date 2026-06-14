@@ -1224,6 +1224,74 @@ export const CONCEPT_LIBRARY: Record<string, ComponentConcept> = {
       "LaunchDarkly processes 30+ trillion feature flag evaluations per month for enterprise customers",
     ],
   },
+  "llm-gateway": {
+    componentId: "llm-gateway",
+    whenToUse: [
+      "Any product calling LLMs from multiple providers or models",
+      "Need for prompt caching, token budgets, and cost attribution per tenant",
+      "Streaming responses (SSE) to clients with backpressure handling",
+      "Fallback routing when a primary model provider is rate-limited or down",
+    ],
+    whenNotToUse: [
+      "Single-model, single-provider prototype with no cost controls needed",
+      "Batch offline inference where latency and streaming don't matter",
+    ],
+    keyTradeoffs: [
+      "Caching identical prompts saves cost but can serve stale answers if context changed",
+      "Routing to cheaper/smaller models for simple queries vs always using GPT-4",
+      "Streaming improves perceived latency but complicates error handling mid-response",
+      "Self-hosted models reduce per-token cost but require GPU fleet management",
+    ],
+    interviewTips: [
+      "Always mention an LLM gateway when designing AI chat or RAG systems — interviewers expect provider abstraction and cost controls",
+      "Discuss prompt caching: hash(system_prompt + user_query) → cache hit skips the LLM call entirely",
+      "Explain token budgeting: per-user daily limits prevent runaway costs from abuse or loops",
+    ],
+    commonPatterns: [
+      { name: "Model Router", description: "Classify query complexity → route simple queries to Haiku/mini, complex to Opus/GPT-4" },
+      { name: "Prompt Cache", description: "Cache LLM responses keyed by prompt hash; invalidate on knowledge-base update" },
+      { name: "Streaming SSE", description: "Stream tokens to client as generated; client renders incrementally for better UX" },
+    ],
+    realWorldExamples: [
+      "Shopify routes all merchant AI features through an internal LLM gateway for cost tracking and model selection",
+      "Notion's AI features use a gateway layer to abstract OpenAI and Anthropic with unified rate limiting",
+      "OpenRouter aggregates 100+ models behind a single API with automatic failover",
+    ],
+  },
+  "embedding-service": {
+    componentId: "embedding-service",
+    whenToUse: [
+      "RAG pipelines: embed documents at ingest time and queries at search time",
+      "Semantic deduplication: cluster similar support tickets or documents",
+      "Recommendation systems that match items by embedding similarity",
+      "Multimodal search: embed images and text into the same vector space",
+    ],
+    whenNotToUse: [
+      "Exact keyword search is sufficient (use Elasticsearch BM25 instead)",
+      "Dataset is tiny (<10K docs) where brute-force embedding comparison is fine",
+    ],
+    keyTradeoffs: [
+      "Batch embedding at ingest is cheaper but adds indexing latency for new documents",
+      "Online query embedding adds 20-100ms per request but enables real-time search",
+      "Model choice affects quality vs cost: 384-dim models are fast, 1536-dim are more accurate",
+      "GPU batching improves throughput but adds queueing latency under load",
+    ],
+    interviewTips: [
+      "Separate the embedding step from the vector DB — they're different scaling concerns",
+      "Mention chunking strategy: fixed-size vs semantic splits dramatically affect RAG quality",
+      "Discuss re-embedding: when you upgrade the embedding model, you must re-index all documents",
+    ],
+    commonPatterns: [
+      { name: "Ingest Pipeline", description: "Document → chunk → embed (batch) → upsert to vector DB → index metadata in search DB" },
+      { name: "Query Pipeline", description: "User query → embed (online) → ANN search in vector DB → rerank → return top-k chunks" },
+      { name: "Hybrid Retrieval", description: "Combine BM25 keyword score with vector cosine similarity for best recall" },
+    ],
+    realWorldExamples: [
+      "OpenAI's text-embedding-3-small processes millions of embedding requests/day for RAG applications",
+      "Pinecone's ingestion API batches embedding writes for 10x throughput vs single-vector upserts",
+      "Slack's AI search embeds messages and files at write time for sub-second semantic search",
+    ],
+  },
 };
 
 export function getConceptByComponentId(componentId: string): ComponentConcept | undefined {

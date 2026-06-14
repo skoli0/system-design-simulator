@@ -11,15 +11,15 @@ const ICONS = {
 };
 
 const COLORS = {
-  success: "border-emerald-500/30 bg-zinc-900 text-emerald-300",
-  error: "border-rose-500/30 bg-zinc-900 text-rose-300",
-  info: "border-zinc-700 bg-zinc-900 text-zinc-300",
+  success: "border-emerald-500/30 bg-card text-emerald-700 dark:text-emerald-300",
+  error: "border-rose-500/30 bg-card text-rose-700 dark:text-rose-300",
+  info: "border-border bg-card text-foreground/80",
 };
 
 const ICON_COLORS = {
-  success: "text-emerald-400",
-  error: "text-rose-400",
-  info: "text-cyan-400",
+  success: "text-emerald-600 dark:text-emerald-400",
+  error: "text-rose-600 dark:text-rose-400",
+  info: "text-cyan-600 dark:text-cyan-400",
 };
 
 export function Toast() {

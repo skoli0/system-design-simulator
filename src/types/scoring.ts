@@ -22,6 +22,24 @@ export interface CategoryScore {
   passed: string[];
 }
 
+export type ScoreActionKind =
+  | "add-component"
+  | "wire-component"
+  | "set-db-replicas"
+  | "scale-redundancy"
+  | "select-component"
+  | "select-disconnected"
+  | "load-reference"
+  | "open-components"
+  | "rescore";
+
+export interface ScoreSuggestion {
+  id: string;
+  label: string;
+  kind: ScoreActionKind;
+  componentId?: string;
+}
+
 export interface ScoreResult {
   total: number; // 0-100
   categories: CategoryScore[];

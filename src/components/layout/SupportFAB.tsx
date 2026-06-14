@@ -18,7 +18,7 @@ export function SupportFAB({ onClick, hidden = false }: SupportFABProps) {
   return (
     <button
       onClick={onClick}
-      className="group fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full border border-cyan-300/50 bg-gradient-to-br from-cyan-400 via-cyan-500 to-cyan-600 text-zinc-950 shadow-lg shadow-cyan-500/30 ring-1 ring-black/10 transition-transform hover:-translate-y-0.5 hover:scale-[1.05] active:translate-y-0 md:bottom-20"
+      className="group fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full border border-cyan-300/50 bg-gradient-to-br from-cyan-400 via-cyan-500 to-cyan-600 text-background shadow-lg shadow-cyan-500/30 ring-1 ring-black/10 transition-transform hover:-translate-y-0.5 hover:scale-[1.05] active:translate-y-0 md:bottom-20"
       title="Buy me a coffee — support the project"
       aria-label="Buy me a coffee"
     >

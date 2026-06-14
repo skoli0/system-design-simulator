@@ -61,7 +61,7 @@
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
+  --accent: oklch(0.96 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
@@ -81,6 +81,13 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --canvas-dot: rgba(0, 0, 0, 0.10);
+  --scrollbar-thumb: rgb(180, 180, 188);
+  --scrollbar-thumb-hover: rgb(140, 140, 150);
+  --shadow-e1: 0 1px 2px 0 oklch(0 0 0 / 0.06);
+  --shadow-e2: 0 2px 8px -2px oklch(0 0 0 / 0.08), 0 1px 2px 0 oklch(0 0 0 / 0.06);
+  --shadow-e3: 0 8px 24px -6px oklch(0 0 0 / 0.10), 0 2px 6px -2px oklch(0 0 0 / 0.06);
+  --shadow-e4: 0 16px 48px -12px oklch(0 0 0 / 0.14), 0 4px 12px -4px oklch(0 0 0 / 0.08);
 }
 
 .dark {
@@ -118,6 +125,13 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(0.24 0 0);
   --sidebar-ring: oklch(0.50 0 0);
+  --canvas-dot: rgba(63, 63, 70, 0.5);
+  --scrollbar-thumb: rgb(63, 63, 70);
+  --scrollbar-thumb-hover: rgb(90, 90, 100);
+  --shadow-e1: 0 1px 2px 0 oklch(0 0 0 / 0.30);
+  --shadow-e2: 0 2px 8px -2px oklch(0 0 0 / 0.40), 0 1px 2px 0 oklch(0 0 0 / 0.30);
+  --shadow-e3: 0 8px 24px -6px oklch(0 0 0 / 0.50), 0 2px 6px -2px oklch(0 0 0 / 0.35);
+  --shadow-e4: 0 16px 48px -12px oklch(0 0 0 / 0.60), 0 4px 12px -4px oklch(0 0 0 / 0.40);
 }
 
 @layer base {
@@ -141,16 +155,6 @@
   }
 }
 
-/* ── Elevation scale ───────────────────────────────────────────────────────
-   One consistent shadow ramp for the whole app (cards → panels → sheets →
-   popovers). Tuned for a dark UI: low-spread, slightly cool, never milky. */
-@theme inline {
-  --shadow-e1: 0 1px 2px 0 oklch(0 0 0 / 0.30);
-  --shadow-e2: 0 2px 8px -2px oklch(0 0 0 / 0.40), 0 1px 2px 0 oklch(0 0 0 / 0.30);
-  --shadow-e3: 0 8px 24px -6px oklch(0 0 0 / 0.50), 0 2px 6px -2px oklch(0 0 0 / 0.35);
-  --shadow-e4: 0 16px 48px -12px oklch(0 0 0 / 0.60), 0 4px 12px -4px oklch(0 0 0 / 0.40);
-}
-
 /* Full viewport height with dvh fallback so mobile browser chrome doesn't shift layout */
 html, body { height: 100%; }
 @supports (height: 100dvh) {
@@ -169,15 +173,15 @@ button, a, [role="button"], input, textarea, select { touch-action: manipulation
   width: 40px;
   height: 4px;
   border-radius: 9999px;
-  background: rgb(82, 82, 91);
+  background: var(--border);
   margin-inline: auto;
 }
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgb(63, 63, 70); border-radius: 9999px; border: 2px solid transparent; background-clip: padding-box; }
-::-webkit-scrollbar-thumb:hover { background: rgb(90, 90, 100); background-clip: padding-box; }
-* { scrollbar-width: thin; scrollbar-color: rgb(63,63,70) transparent; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 9999px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); background-clip: padding-box; }
+* { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) transparent; }
 
 /* Crisp cyan focus ring on a dark UI */
 *:focus-visible { outline: 2px solid oklch(0.72 0.14 210); outline-offset: 2px; border-radius: 4px; }

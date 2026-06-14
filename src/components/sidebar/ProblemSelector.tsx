@@ -6,6 +6,7 @@ import { Plus, X } from "lucide-react";
 import { PROBLEMS } from "@/data/problems";
 import { useAppStore } from "@/store/appStore";
 import { useCustomProblemsStore } from "@/store/customProblemsStore";
+import { selectProblemWithReference } from "@/lib/loadReference";
 
 function getDifficultyColor(difficulty: string) {
   switch (difficulty) {
@@ -26,16 +27,19 @@ interface ProblemSelectorProps {
 
 export function ProblemSelector({ onCreateProblem }: ProblemSelectorProps) {
   const selectedProblemId = useAppStore((s) => s.selectedProblemId);
-  const setSelectedProblem = useAppStore((s) => s.setSelectedProblem);
   const customProblems = useCustomProblemsStore((s) => s.problems);
   const deleteProblem = useCustomProblemsStore((s) => s.deleteProblem);
+
+  const handleSelectProblem = (id: string) => {
+    selectProblemWithReference(id);
+  };
 
   const handleDeleteCustom = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     deleteProblem(id);
     // If the deleted problem was selected, switch to the first predefined problem
     if (selectedProblemId === id) {
-      setSelectedProblem(PROBLEMS[0].id);
+      selectProblemWithReference(PROBLEMS[0].id);
     }
     useAppStore.getState().showToast("Custom problem deleted", "info");
   };
@@ -46,7 +50,7 @@ export function ProblemSelector({ onCreateProblem }: ProblemSelectorProps) {
         {/* Create Problem button */}
         <button
           onClick={onCreateProblem}
-          className="flex w-full items-center gap-2 rounded-md border border-dashed border-zinc-600 px-2.5 py-2 text-left text-xs font-medium text-violet-400 transition-colors hover:border-violet-500/50 hover:bg-violet-500/5"
+          className="flex w-full items-center gap-2 rounded-md border border-dashed border-border px-2.5 py-2 text-left text-xs font-medium text-violet-400 transition-colors hover:border-violet-500/50 hover:bg-violet-500/5"
         >
           <Plus className="h-3.5 w-3.5" />
           Create Custom Problem
@@ -59,18 +63,18 @@ export function ProblemSelector({ onCreateProblem }: ProblemSelectorProps) {
             key={problem.id}
             role="button"
             tabIndex={0}
-            onClick={() => setSelectedProblem(problem.id)}
+            onClick={() => handleSelectProblem(problem.id)}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                setSelectedProblem(problem.id);
+                handleSelectProblem(problem.id);
               }
             }}
             aria-pressed={problem.id === selectedProblemId}
             className={`group flex w-full cursor-pointer flex-col gap-1.5 rounded-md px-2.5 py-2 text-left transition-colors ${
               problem.id === selectedProblemId
-                ? "border border-zinc-700 bg-zinc-800"
-                : "border border-transparent hover:bg-zinc-800"
+                ? "border border-border bg-muted"
+                : "border border-transparent hover:bg-muted"
             }`}
           >
             <div className="flex items-center justify-between gap-1">
@@ -78,7 +82,7 @@ export function ProblemSelector({ onCreateProblem }: ProblemSelectorProps) {
                 className={`flex-1 truncate text-xs font-medium ${
                   problem.id === selectedProblemId
                     ? "text-cyan-500"
-                    : "text-zinc-300"
+                    : "text-foreground/80"
                 }`}
               >
                 {problem.title}
@@ -100,7 +104,7 @@ export function ProblemSelector({ onCreateProblem }: ProblemSelectorProps) {
                 </Badge>
                 <button
                   onClick={(e) => handleDeleteCustom(e, problem.id)}
-                  className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-zinc-500 opacity-60 transition-opacity hover:text-rose-400 group-focus-within:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
+                  className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground opacity-60 transition-opacity hover:text-rose-400 group-focus-within:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
                   title="Delete custom problem"
                   aria-label={`Delete custom problem ${problem.title}`}
                 >
@@ -110,7 +114,7 @@ export function ProblemSelector({ onCreateProblem }: ProblemSelectorProps) {
             </div>
             <div className="flex flex-wrap gap-1">
               {problem.tags.map((tag, i) => (
-                <span key={tag} className="text-[11px] text-zinc-400">
+                <span key={tag} className="text-[11px] text-muted-foreground">
                   {tag}{i < problem.tags.length - 1 ? " ·" : ""}
                 </span>
               ))}
@@ -120,19 +124,19 @@ export function ProblemSelector({ onCreateProblem }: ProblemSelectorProps) {
 
         {/* Separator if there are custom problems */}
         {customProblems.length > 0 && (
-          <div className="!my-2 h-px bg-zinc-800" />
+          <div className="!my-2 h-px bg-muted" />
         )}
 
         {/* Predefined problems */}
         {PROBLEMS.map((problem) => (
           <button
             key={problem.id}
-            onClick={() => setSelectedProblem(problem.id)}
+            onClick={() => handleSelectProblem(problem.id)}
             aria-pressed={problem.id === selectedProblemId}
             className={`flex w-full flex-col gap-1.5 rounded-md px-2.5 py-2 text-left transition-colors ${
               problem.id === selectedProblemId
-                ? "border border-zinc-700 bg-zinc-800"
-                : "border border-transparent hover:bg-zinc-800"
+                ? "border border-border bg-muted"
+                : "border border-transparent hover:bg-muted"
             }`}
           >
             <div className="flex items-center justify-between">
@@ -140,7 +144,7 @@ export function ProblemSelector({ onCreateProblem }: ProblemSelectorProps) {
                 className={`text-xs font-medium ${
                   problem.id === selectedProblemId
                     ? "text-cyan-500"
-                    : "text-zinc-300"
+                    : "text-foreground/80"
                 }`}
               >
                 {problem.title}
@@ -156,7 +160,7 @@ export function ProblemSelector({ onCreateProblem }: ProblemSelectorProps) {
             </div>
             <div className="flex flex-wrap gap-1">
               {problem.tags.map((tag, i) => (
-                <span key={tag} className="text-[11px] text-zinc-400">
+                <span key={tag} className="text-[11px] text-muted-foreground">
                   {tag}{i < problem.tags.length - 1 ? " ·" : ""}
                 </span>
               ))}

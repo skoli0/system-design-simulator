@@ -19,13 +19,13 @@ export function PenToolbar() {
 
   return (
     <>
-    <div className="pointer-events-auto absolute right-3 top-3 z-20 flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900/90 p-1 shadow-lg backdrop-blur">
+    <div className="pointer-events-auto absolute right-3 top-3 z-20 flex items-center gap-1 rounded-md border border-border bg-card/90 p-1 shadow-lg backdrop-blur">
       <button
         onClick={() => setMode(mode === "pen" ? "off" : "pen")}
         className={`flex h-7 w-7 [@media(pointer:coarse)]:h-10 [@media(pointer:coarse)]:w-10 items-center justify-center rounded transition-colors ${
           mode === "pen"
             ? "bg-cyan-500/20 text-cyan-400"
-            : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground"
         }`}
         title="Pen (draw on canvas)"
         aria-label="Pen tool"
@@ -38,7 +38,7 @@ export function PenToolbar() {
         className={`flex h-7 w-7 [@media(pointer:coarse)]:h-10 [@media(pointer:coarse)]:w-10 items-center justify-center rounded transition-colors ${
           mode === "eraser"
             ? "bg-rose-500/20 text-rose-400"
-            : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground"
         }`}
         title="Eraser"
         aria-label="Eraser tool"
@@ -49,7 +49,7 @@ export function PenToolbar() {
 
       {mode !== "off" && (
         <>
-          <div className="mx-1 h-4 w-px bg-zinc-800" />
+          <div className="mx-1 h-4 w-px bg-muted" />
 
           <div className="flex items-center gap-1">
             {PEN_COLORS.map((c) => (
@@ -59,7 +59,7 @@ export function PenToolbar() {
                 className={`h-5 w-5 rounded-full border transition-transform [@media(pointer:coarse)]:h-10 [@media(pointer:coarse)]:w-10 ${
                   color === c
                     ? "scale-110 border-white"
-                    : "border-zinc-700 hover:scale-105"
+                    : "border-border hover:scale-105"
                 }`}
                 style={{ backgroundColor: c }}
                 title={c}
@@ -68,7 +68,7 @@ export function PenToolbar() {
             ))}
           </div>
 
-          <div className="mx-1 h-4 w-px bg-zinc-800" />
+          <div className="mx-1 h-4 w-px bg-muted" />
 
           <div className="flex items-center gap-1">
             {PEN_WIDTHS.map((w) => (
@@ -76,13 +76,13 @@ export function PenToolbar() {
                 key={w}
                 onClick={() => setWidth(w)}
                 className={`flex h-5 w-5 items-center justify-center rounded transition-colors [@media(pointer:coarse)]:h-10 [@media(pointer:coarse)]:w-10 ${
-                  width === w ? "bg-zinc-700" : "hover:bg-zinc-800"
+                  width === w ? "bg-accent" : "hover:bg-muted"
                 }`}
                 title={`${w}px stroke width`}
                 aria-label={`Stroke width ${w}px`}
               >
                 <div
-                  className="rounded-full bg-zinc-300"
+                  className="rounded-full bg-muted-foreground/50"
                   style={{ width: `${Math.min(w / 2 + 2, 14)}px`, height: `${Math.min(w / 2 + 2, 14)}px` }}
                 />
               </button>
@@ -93,10 +93,10 @@ export function PenToolbar() {
 
       {strokes.length > 0 && (
         <>
-          <div className="mx-1 h-4 w-px bg-zinc-800" />
+          <div className="mx-1 h-4 w-px bg-muted" />
           <button
             onClick={() => setConfirmOpen(true)}
-            className="flex h-7 w-7 items-center justify-center rounded text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-rose-400 [@media(pointer:coarse)]:h-10 [@media(pointer:coarse)]:w-10"
+            className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-rose-400 [@media(pointer:coarse)]:h-10 [@media(pointer:coarse)]:w-10"
             title="Clear all drawings"
             aria-label="Clear all drawings"
           >

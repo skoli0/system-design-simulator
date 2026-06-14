@@ -26,12 +26,12 @@ export function InterviewPhasePanel() {
   return (
     <div className="flex h-full w-full flex-1 flex-col md:w-[300px]">
       {/* Phase header */}
-      <div className="border-b border-zinc-800 px-3 py-3">
+      <div className="border-b border-border px-3 py-3">
         <div className="flex items-center gap-2">
           <PhaseIcon icon={phase.icon} />
           <div>
-            <p className="text-xs font-semibold text-zinc-200">{phase.name}</p>
-            <p className="text-[10px] text-zinc-400">{phase.description}</p>
+            <p className="text-xs font-semibold text-foreground">{phase.name}</p>
+            <p className="text-[10px] text-muted-foreground">{phase.description}</p>
           </div>
         </div>
       </div>
@@ -40,18 +40,18 @@ export function InterviewPhasePanel() {
         <div className="p-3 space-y-4">
           {currentPhase === 0 && <RequirementsGuide problem={problem} />}
           {currentPhase === 1 && <EstimationGuide problem={problem} />}
-          {currentPhase === 2 && <APIDesignGuide problem={problem} />}
-          {currentPhase === 3 && <DataModelGuide problem={problem} />}
+          {currentPhase === 2 && <APIDesignGuide />}
+          {currentPhase === 3 && <DataModelGuide />}
           {currentPhase === 5 && <DeepDiveGuide problem={problem} />}
         </div>
       </ScrollArea>
 
       {/* Next phase button */}
       {currentPhase < phases.length - 1 && (
-        <div className="border-t border-zinc-800 px-3 py-2">
+        <div className="border-t border-border px-3 py-2">
           <button
             onClick={nextPhase}
-            className="flex w-full items-center justify-center gap-1.5 rounded-md bg-zinc-800 px-3 py-2 text-xs font-medium text-zinc-200 transition-colors hover:bg-zinc-700"
+            className="flex w-full items-center justify-center gap-1.5 rounded-md bg-muted px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-accent"
           >
             Next: {phases[currentPhase + 1].name}
             <ChevronRight className="h-3.5 w-3.5" />
@@ -87,14 +87,14 @@ function PhaseIcon({ icon }: { icon: string }) {
 function GuideItem({ title, items }: { title: string; items: string[] }) {
   return (
     <div className="space-y-1.5">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
         {title}
       </p>
       <div className="space-y-1">
         {items.map((item, i) => (
-          <div key={i} className="flex items-start gap-2 rounded-md bg-zinc-800 px-2.5 py-2">
-            <span className="mt-0.5 text-[10px] text-zinc-600">{i + 1}.</span>
-            <span className="text-xs leading-relaxed text-zinc-400">{item}</span>
+          <div key={i} className="flex items-start gap-2 rounded-md bg-muted px-2.5 py-2">
+            <span className="mt-0.5 text-[10px] text-muted-foreground/60">{i + 1}.</span>
+            <span className="text-xs leading-relaxed text-muted-foreground">{item}</span>
           </div>
         ))}
       </div>
@@ -111,12 +111,12 @@ function RequirementsGuide({ problem }: GuideProps) {
     <>
       {problem && (
         <div className="space-y-1.5">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Problem
           </p>
-          <div className="rounded-md bg-zinc-800 px-2.5 py-2">
-            <p className="text-xs font-medium text-zinc-200">{problem.title}</p>
-            <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+          <div className="rounded-md bg-muted px-2.5 py-2">
+            <p className="text-xs font-medium text-foreground">{problem.title}</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
               {problem.description}
             </p>
           </div>
@@ -145,7 +145,7 @@ function EstimationGuide({ problem }: GuideProps) {
     <>
       {problem && (
         <div className="space-y-1.5">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Given numbers
           </p>
           <div className="space-y-1">
@@ -156,9 +156,9 @@ function EstimationGuide({ problem }: GuideProps) {
               { label: "Storage", value: `${new Intl.NumberFormat("en-US").format(problem.requirements.storageGB)} GB` },
               { label: "Latency SLA", value: `< ${problem.requirements.latencyMs}ms` },
             ].map((item) => (
-              <div key={item.label} className="flex items-center justify-between rounded-md bg-zinc-800 px-2.5 py-1.5">
-                <span className="text-xs text-zinc-400">{item.label}</span>
-                <span className="font-mono text-xs text-zinc-300">{item.value}</span>
+              <div key={item.label} className="flex items-center justify-between rounded-md bg-muted px-2.5 py-1.5">
+                <span className="text-xs text-muted-foreground">{item.label}</span>
+                <span className="font-mono text-xs text-foreground/80">{item.value}</span>
               </div>
             ))}
           </div>
@@ -179,7 +179,7 @@ function EstimationGuide({ problem }: GuideProps) {
   );
 }
 
-function APIDesignGuide({ problem: _problem }: GuideProps) {
+function APIDesignGuide() {
   return (
     <>
       <GuideItem
@@ -192,9 +192,9 @@ function APIDesignGuide({ problem: _problem }: GuideProps) {
           "Define error responses and status codes",
         ]}
       />
-      <div className="rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-2">
-        <p className="text-[10px] font-semibold text-zinc-500">TIP</p>
-        <p className="mt-0.5 text-xs text-zinc-400">
+      <div className="rounded-md border border-border bg-muted px-2.5 py-2">
+        <p className="text-[10px] font-semibold text-muted-foreground">TIP</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
           Use the text notes on the canvas to draft your API endpoints.
           Click &quot;Add Note&quot; in the top bar.
         </p>
@@ -203,7 +203,7 @@ function APIDesignGuide({ problem: _problem }: GuideProps) {
   );
 }
 
-function DataModelGuide({ problem: _problem }: GuideProps) {
+function DataModelGuide() {
   return (
     <>
       <GuideItem
@@ -216,9 +216,9 @@ function DataModelGuide({ problem: _problem }: GuideProps) {
           "Think about indexing strategy",
         ]}
       />
-      <div className="rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-2">
-        <p className="text-[10px] font-semibold text-zinc-500">TIP</p>
-        <p className="mt-0.5 text-xs text-zinc-400">
+      <div className="rounded-md border border-border bg-muted px-2.5 py-2">
+        <p className="text-[10px] font-semibold text-muted-foreground">TIP</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
           Use text notes on the canvas to sketch your schema.
           Focus on the access patterns, not just the structure.
         </p>
@@ -243,13 +243,13 @@ function DeepDiveGuide({ problem }: GuideProps) {
       />
       {problem && problem.hints.length > 0 && (
         <div className="space-y-1.5">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Hints for {problem.title}
           </p>
           {problem.hints.map((hint, i) => (
-            <div key={i} className="rounded-md bg-zinc-800 px-2.5 py-2">
-              <p className="text-xs font-medium text-zinc-300">{hint.title}</p>
-              <p className="mt-0.5 text-xs text-zinc-500">{hint.content}</p>
+            <div key={i} className="rounded-md bg-muted px-2.5 py-2">
+              <p className="text-xs font-medium text-foreground/80">{hint.title}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{hint.content}</p>
             </div>
           ))}
         </div>

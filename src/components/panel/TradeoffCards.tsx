@@ -13,7 +13,7 @@ export function TradeoffCards() {
 
   return (
     <div className="space-y-3">
-      <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         Reference Cards
       </p>
       <div className="space-y-1.5">
@@ -22,24 +22,24 @@ export function TradeoffCards() {
           return (
             <div
               key={card.id}
-              className="rounded-md border border-zinc-700 bg-zinc-800 overflow-hidden"
+              className="rounded-md border border-border bg-muted overflow-hidden"
             >
               <button
                 onClick={() => toggle(card.id)}
                 className="flex w-full items-center gap-2 px-2.5 py-2 text-left"
               >
                 {isOpen ? (
-                  <ChevronDown className="h-3 w-3 shrink-0 text-zinc-500" />
+                  <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
                 ) : (
-                  <ChevronRight className="h-3 w-3 shrink-0 text-zinc-500" />
+                  <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
                 )}
-                <span className="flex-1 text-xs font-medium text-zinc-300">
+                <span className="flex-1 text-xs font-medium text-foreground/80">
                   {card.title}
                 </span>
               </button>
 
               {isOpen && (
-                <div className="border-t border-zinc-700 px-2.5 py-2.5 space-y-3">
+                <div className="border-t border-border px-2.5 py-2.5 space-y-3">
                   {/* Side-by-side options */}
                   <div className="grid grid-cols-2 gap-2">
                     {/* Option A */}
@@ -53,7 +53,7 @@ export function TradeoffCards() {
                         </p>
                         <ul className="mt-0.5 space-y-0.5">
                           {card.optionA.pros.map((pro, i) => (
-                            <li key={i} className="text-[11px] leading-tight text-zinc-400">
+                            <li key={i} className="text-[11px] leading-tight text-muted-foreground">
                               + {pro}
                             </li>
                           ))}
@@ -65,7 +65,7 @@ export function TradeoffCards() {
                         </p>
                         <ul className="mt-0.5 space-y-0.5">
                           {card.optionA.cons.map((con, i) => (
-                            <li key={i} className="text-[11px] leading-tight text-zinc-500">
+                            <li key={i} className="text-[11px] leading-tight text-muted-foreground">
                               - {con}
                             </li>
                           ))}
@@ -84,7 +84,7 @@ export function TradeoffCards() {
                         </p>
                         <ul className="mt-0.5 space-y-0.5">
                           {card.optionB.pros.map((pro, i) => (
-                            <li key={i} className="text-[11px] leading-tight text-zinc-400">
+                            <li key={i} className="text-[11px] leading-tight text-muted-foreground">
                               + {pro}
                             </li>
                           ))}
@@ -96,7 +96,7 @@ export function TradeoffCards() {
                         </p>
                         <ul className="mt-0.5 space-y-0.5">
                           {card.optionB.cons.map((con, i) => (
-                            <li key={i} className="text-[11px] leading-tight text-zinc-500">
+                            <li key={i} className="text-[11px] leading-tight text-muted-foreground">
                               - {con}
                             </li>
                           ))}
@@ -106,12 +106,12 @@ export function TradeoffCards() {
                   </div>
 
                   {/* When to choose */}
-                  <div className="space-y-1.5 border-t border-zinc-700 pt-2">
+                  <div className="space-y-1.5 border-t border-border pt-2">
                     <div>
                       <p className="text-[10px] font-medium text-cyan-500">
                         Choose {card.optionA.name} when:
                       </p>
-                      <p className="text-[11px] leading-relaxed text-zinc-400">
+                      <p className="text-[11px] leading-relaxed text-muted-foreground">
                         {card.whenToChooseA}
                       </p>
                     </div>
@@ -119,7 +119,7 @@ export function TradeoffCards() {
                       <p className="text-[10px] font-medium text-purple-500">
                         Choose {card.optionB.name} when:
                       </p>
-                      <p className="text-[11px] leading-relaxed text-zinc-400">
+                      <p className="text-[11px] leading-relaxed text-muted-foreground">
                         {card.whenToChooseB}
                       </p>
                     </div>

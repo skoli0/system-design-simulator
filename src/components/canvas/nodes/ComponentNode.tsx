@@ -1,10 +1,11 @@
 "use client";
 
 import { memo, useState, useCallback, useRef, useEffect } from "react";
-import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
+import { Handle, Position, useUpdateNodeInternals, type NodeProps, type Node } from "@xyflow/react";
 import { motion } from "framer-motion";
 import type { ComponentNodeData } from "@/store/canvasStore";
 import { useCanvasStore } from "@/store/canvasStore";
+import { useSimulationStore } from "@/store/simulationStore";
 import { Server } from "lucide-react";
 import { ICON_MAP } from "@/lib/icons";
 import { useIsCoarsePointer } from "@/hooks/useBreakpoint";
@@ -26,11 +27,12 @@ const STATUS_DOT: Record<string, string> = {
   healthy: "bg-emerald-500",
   warning: "bg-amber-500",
   critical: "bg-rose-500",
-  idle: "bg-zinc-600",
+  idle: "bg-muted-foreground/40",
 };
 
 function ComponentNodeInner({ id, data, selected }: NodeProps<ComponentNode>) {
   const nodeData = data;
+  const updateNodeInternals = useUpdateNodeInternals();
   const Icon = ICON_MAP[nodeData.icon] ?? Server;
   const colors = CATEGORY_COLORS[nodeData.category] ?? CATEGORY_COLORS.compute;
   const status = (nodeData.status as string) ?? "idle";
@@ -38,6 +40,9 @@ function ComponentNodeInner({ id, data, selected }: NodeProps<ComponentNode>) {
   const isBottleneck = nodeData.isBottleneck ?? false;
   const replicas = nodeData.replicas ?? 1;
   const utilization = nodeData.utilization ?? 0;
+  const trafficActive = useSimulationStore((s) => s.trafficActive);
+  const isSimulating = useSimulationStore((s) => s.isRunning);
+  const showTraffic = trafficActive || isSimulating;
 
   const isCustom = nodeData.componentId === "custom";
   const [editing, setEditing] = useState(false);
@@ -52,6 +57,11 @@ function ComponentNodeInner({ id, data, selected }: NodeProps<ComponentNode>) {
       inputRef.current.select();
     }
   }, [editing]);
+
+  // Keep handle positions in sync when simulation metrics change node height.
+  useEffect(() => {
+    updateNodeInternals(id);
+  }, [id, utilization, status, isBottleneck, replicas, updateNodeInternals]);
 
   const commitLabel = useCallback(() => {
     const trimmed = editLabel.trim();
@@ -80,18 +90,20 @@ function ComponentNodeInner({ id, data, selected }: NodeProps<ComponentNode>) {
   return (
     <div
       className={`
-        group relative flex flex-col items-center gap-1 rounded-xl border bg-zinc-900/95 px-4 py-3
+        group relative flex w-[148px] min-h-[104px] flex-col items-center justify-center gap-1 rounded-xl border bg-card/95 px-4 py-3
         shadow-[var(--shadow-e2)] backdrop-blur-sm transition-all duration-150
         ${isBottleneck
           ? "border-rose-500/60 ring-2 ring-rose-500/20"
           : selected
             ? "border-cyan-500/80 ring-2 ring-cyan-500/30"
-            : "border-zinc-700/70 hover:border-zinc-600"}
+            : showTraffic && status === "healthy"
+              ? "border-cyan-500/40 shadow-[0_0_20px_-6px_rgba(6,182,212,0.45)]"
+              : "border-border/70 hover:border-border"}
       `}
     >
       {/* Status indicator dot */}
       <div
-        className={`absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full ring-2 ring-zinc-900 ${statusDot}`}
+        className={`absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full ring-2 ring-card ${statusDot}`}
         style={{ animation: status !== 'idle' ? 'status-pulse 2s infinite' : 'none' }}
       />
 
@@ -113,11 +125,11 @@ function ComponentNodeInner({ id, data, selected }: NodeProps<ComponentNode>) {
                 setEditing(false);
               }
             }}
-            className="nodrag max-w-[80px] bg-transparent text-[11px] font-medium text-zinc-200 outline-none border-b border-cyan-500"
+            className="nodrag max-w-[80px] bg-transparent text-[11px] font-medium text-foreground outline-none border-b border-cyan-500"
           />
         ) : (
           <span
-            className={`max-w-[96px] whitespace-normal break-words text-center text-[11px] font-medium leading-tight text-zinc-200 ${isCustom ? "cursor-text" : ""}`}
+            className={`max-w-[96px] whitespace-normal break-words text-center text-[11px] font-medium leading-tight text-foreground ${isCustom ? "cursor-text" : ""}`}
             onDoubleClick={handleDoubleClick}
             onClick={handleLabelClick}
           >
@@ -127,7 +139,7 @@ function ComponentNodeInner({ id, data, selected }: NodeProps<ComponentNode>) {
       </div>
 
       {/* Stats */}
-      <span className="font-mono text-[9px] text-zinc-400">
+      <span className="font-mono text-[9px] text-muted-foreground">
         {nodeData.maxQPS === Infinity ? '\u221e' : ((nodeData.maxQPS ?? 0)/1000).toFixed(0) + 'k'} qps
       </span>
 
@@ -138,35 +150,39 @@ function ComponentNodeInner({ id, data, selected }: NodeProps<ComponentNode>) {
         </span>
       )}
 
-      {/* Utilization bar (shown during simulation) */}
-      {utilization > 0 && (
-        <div className="mt-0.5 flex w-full items-center gap-1">
-          <div className="h-1 flex-1 overflow-hidden rounded-full bg-zinc-800">
-            <motion.div
-              className={`h-full rounded-full ${
-                utilization > 0.8 ? "bg-rose-500" : utilization > 0.5 ? "bg-amber-500" : "bg-emerald-500"
-              }`}
-              initial={{ width: 0 }}
-              animate={{ width: `${Math.min(utilization * 100, 100)}%` }}
-              transition={{ duration: 0.3 }}
-            />
-          </div>
-          <span className={`font-mono text-[8px] ${
-            utilization > 0.8 ? "text-rose-400" : utilization > 0.5 ? "text-amber-400" : "text-emerald-400"
-          }`}>{(utilization * 100).toFixed(0)}%</span>
-        </div>
-      )}
+      {/* Utilization bar — fixed height slot so edges stay aligned during simulation */}
+      <div className="mt-0.5 flex h-[14px] w-full items-center gap-1">
+        {utilization > 0 ? (
+          <>
+            <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+              <motion.div
+                className={`h-full rounded-full ${
+                  utilization > 0.8 ? "bg-rose-500" : utilization > 0.5 ? "bg-amber-500" : "bg-emerald-500"
+                }`}
+                initial={{ width: 0 }}
+                animate={{ width: `${Math.min(utilization * 100, 100)}%` }}
+                transition={{ duration: 0.3 }}
+              />
+            </div>
+            <span className={`font-mono text-[8px] ${
+              utilization > 0.8 ? "text-rose-400" : utilization > 0.5 ? "text-amber-400" : "text-emerald-400"
+            }`}>{(utilization * 100).toFixed(0)}%</span>
+          </>
+        ) : null}
+      </div>
 
       {/* Handles — larger visual size on touch devices (44px hit area via CSS ::after) */}
       <Handle
         type="target"
         position={Position.Left}
-        className={`${isCoarse ? "!h-5 !w-5" : "!h-2 !w-2"} !rounded-full !border !border-zinc-600 !bg-zinc-400`}
+        id="left"
+        className={`${isCoarse ? "!h-5 !w-5" : "!h-2 !w-2"} !rounded-full !border !border-border !bg-muted-foreground`}
       />
       <Handle
         type="source"
         position={Position.Right}
-        className={`${isCoarse ? "!h-5 !w-5" : "!h-2 !w-2"} !rounded-full !border !border-zinc-600 !bg-zinc-400`}
+        id="right"
+        className={`${isCoarse ? "!h-5 !w-5" : "!h-2 !w-2"} !rounded-full !border !border-border !bg-muted-foreground`}
       />
     </div>
   );

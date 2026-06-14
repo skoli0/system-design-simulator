@@ -90,8 +90,17 @@ function stripRuntimeFields(nodes: Node[]): Node[] {
 }
 
 function resetSimulation(): void {
-  // Metrics/score refer to nodes that just changed out from under them.
-  useSimulationStore.getState().reset();
+  // Clear live simulation metrics only — keep score until the canvas changes.
+  const sim = useSimulationStore.getState();
+  sim.setRunning(false);
+  sim.setTrafficActive(false);
+  sim.setResult(null);
+}
+
+function clearScore(): void {
+  const sim = useSimulationStore.getState();
+  sim.setScoreResult(null);
+  sim.setShowScore(false);
 }
 
 interface CanvasState {
@@ -103,7 +112,7 @@ interface CanvasState {
   // Tab system
   tabs: CanvasTab[];
   activeTabId: string;
-  addTab: (tab: CanvasTab) => void;
+  addTab: (tab: CanvasTab, options?: { activate?: boolean }) => void;
   switchTab: (tabId: string) => void;
   closeTab: (tabId: string) => void;
   renameTab: (tabId: string, label: string) => void;
@@ -123,6 +132,11 @@ interface CanvasState {
   onEdgesChange: OnEdgesChange;
   onConnect: OnConnect;
   addNode: (node: Node) => void;
+  addEdgeDirect: (
+    source: string,
+    target: string,
+    data?: CustomEdgeData
+  ) => void;
   setSelectedNode: (id: string | null) => void;
   setSelectedEdge: (id: string | null) => void;
   updateNodeData: (nodeId: string, data: Partial<ComponentNodeData>) => void;
@@ -133,6 +147,8 @@ interface CanvasState {
   clearCanvas: () => void;
   deleteNode: (nodeId: string) => void;
   deleteEdge: (edgeId: string) => void;
+  /** Replace My Design canvas content (used when seeding reference or relayouting). */
+  loadMyDesignContent: (nodes: Node[], edges: Edge[]) => void;
 }
 
 export const useCanvasStore = create<CanvasState>()(
@@ -151,7 +167,8 @@ export const useCanvasStore = create<CanvasState>()(
       future: [],
       isDragging: false,
 
-      addTab: (tab) => {
+      addTab: (tab, options) => {
+        const activate = options?.activate !== false;
         set((state) => {
           // Save current tab state before switching
           const updatedTabs = state.tabs.map((t) =>
@@ -159,21 +176,16 @@ export const useCanvasStore = create<CanvasState>()(
           );
           // Check if tab already exists (reuse it)
           const existing = updatedTabs.find((t) => t.id === tab.id);
-          if (existing) {
-            return {
-              tabs: updatedTabs.map((t) => (t.id === tab.id ? { ...t, ...tab } : t)),
-              activeTabId: tab.id,
-              nodes: tab.nodes,
-              edges: tab.edges,
-              selectedNodeId: null,
-              selectedEdgeId: null,
-              history: [],
-              future: [],
-              isDragging: false,
-            };
+          const nextTabs = existing
+            ? updatedTabs.map((t) => (t.id === tab.id ? { ...t, ...tab } : t))
+            : [...updatedTabs, tab];
+
+          if (!activate) {
+            return { tabs: nextTabs };
           }
+
           return {
-            tabs: [...updatedTabs, tab],
+            tabs: nextTabs,
             activeTabId: tab.id,
             nodes: tab.nodes,
             edges: tab.edges,
@@ -184,7 +196,7 @@ export const useCanvasStore = create<CanvasState>()(
             isDragging: false,
           };
         });
-        resetSimulation();
+        if (activate) resetSimulation();
       },
 
       switchTab: (tabId) => {
@@ -334,6 +346,27 @@ export const useCanvasStore = create<CanvasState>()(
           nodes: [...state.nodes, node],
         }));
       },
+      addEdgeDirect: (source, target, data) => {
+        set((state) => {
+          if (state.edges.some((e) => e.source === source && e.target === target)) {
+            return state;
+          }
+          return {
+            history: pushedHistory(state),
+            future: [],
+            edges: addEdge(
+              {
+                id: `e-${source}-${target}-${crypto.randomUUID().slice(0, 6)}`,
+                source,
+                target,
+                type: "animated",
+                data: data ?? { label: "", protocol: "http", async: false },
+              },
+              state.edges
+            ),
+          };
+        });
+      },
       setSelectedNode: (id) => {
         set({ selectedNodeId: id, selectedEdgeId: null });
       },
@@ -372,6 +405,7 @@ export const useCanvasStore = create<CanvasState>()(
           selectedEdgeId: null,
         }));
         resetSimulation();
+        clearScore();
       },
       deleteNode: (nodeId) => {
         set((state) => ({
@@ -400,6 +434,39 @@ export const useCanvasStore = create<CanvasState>()(
           selectedEdgeId:
             state.selectedEdgeId === edgeId ? null : state.selectedEdgeId,
         }));
+      },
+      loadMyDesignContent: (nodes, edges) => {
+        const beforeTab = get().activeTabId;
+        set((state) => {
+          const tabs = state.tabs.map((t) =>
+            t.id === state.activeTabId
+              ? { ...t, nodes: state.nodes, edges: state.edges }
+              : t
+          );
+          const hasMyDesign = tabs.some((t) => t.id === "my-design");
+          const updatedTabs = hasMyDesign
+            ? tabs.map((t) =>
+                t.id === "my-design" ? { ...t, nodes, edges } : t
+              )
+            : [
+                { id: "my-design", label: "My Design", nodes, edges },
+                ...tabs,
+              ];
+
+          return {
+            tabs: updatedTabs,
+            activeTabId: "my-design",
+            nodes,
+            edges,
+            selectedNodeId: null,
+            selectedEdgeId: null,
+            history:
+              state.activeTabId === "my-design" ? pushedHistory(state) : [],
+            future: [],
+            isDragging: false,
+          };
+        });
+        if (get().activeTabId !== beforeTab) resetSimulation();
       },
     }),
     {

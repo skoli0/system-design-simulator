@@ -5,7 +5,7 @@ import { X, Server } from "lucide-react";
 import { useCustomComponentsStore } from "@/store/customComponentsStore";
 import { useAppStore } from "@/store/appStore";
 import { COMPONENT_CATEGORIES } from "@/data/components";
-import { ICON_MAP } from "@/lib/icons";
+import { ICON_MAP, ICON_PICKER_OPTIONS } from "@/lib/icons";
 import type { ComponentCategory } from "@/types/component";
 import { ModalShell } from "./ModalShell";
 
@@ -14,7 +14,7 @@ interface CreateComponentDialogProps {
   onClose: () => void;
 }
 
-const ICON_OPTIONS = Object.keys(ICON_MAP);
+const ICON_OPTIONS = ICON_PICKER_OPTIONS;
 
 export function CreateComponentDialog({ open, onClose }: CreateComponentDialogProps) {
   const addComponent = useCustomComponentsStore((s) => s.addComponent);
@@ -66,7 +66,7 @@ export function CreateComponentDialog({ open, onClose }: CreateComponentDialogPr
   };
 
   const inputClass =
-    "w-full rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-xs text-zinc-100 placeholder-zinc-500 outline-none focus:border-cyan-500";
+    "w-full rounded-md border border-border bg-muted px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-cyan-500";
 
   const SelectedIcon = ICON_MAP[icon] ?? Server;
 
@@ -78,10 +78,10 @@ export function CreateComponentDialog({ open, onClose }: CreateComponentDialogPr
       ariaLabel="Create custom component"
     >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-zinc-100">Create Custom Component</h2>
+          <h2 className="text-sm font-semibold text-foreground">Create Custom Component</h2>
           <button
             onClick={onClose}
-            className="flex h-6 w-6 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+            className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground/80"
             aria-label="Close"
           >
             <X className="h-4 w-4" />
@@ -91,7 +91,7 @@ export function CreateComponentDialog({ open, onClose }: CreateComponentDialogPr
         <div className="space-y-3">
           {/* Label */}
           <div>
-            <label className="mb-1 block text-xs text-zinc-400">Label *</label>
+            <label className="mb-1 block text-xs text-muted-foreground">Label *</label>
             <input
               type="text"
               value={label}
@@ -104,7 +104,7 @@ export function CreateComponentDialog({ open, onClose }: CreateComponentDialogPr
 
           {/* Category */}
           <div>
-            <label className="mb-1 block text-xs text-zinc-400">Category</label>
+            <label className="mb-1 block text-xs text-muted-foreground">Category</label>
             <div className="grid grid-cols-5 gap-1">
               {COMPONENT_CATEGORIES.map((c) => (
                 <button
@@ -113,7 +113,7 @@ export function CreateComponentDialog({ open, onClose }: CreateComponentDialogPr
                   className={`rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors ${
                     category === c.key
                       ? "border border-cyan-500/30 bg-cyan-600/20 text-cyan-400"
-                      : "border border-zinc-700 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                      : "border border-border bg-muted text-muted-foreground hover:bg-accent"
                   }`}
                 >
                   {c.label}
@@ -124,9 +124,9 @@ export function CreateComponentDialog({ open, onClose }: CreateComponentDialogPr
 
           {/* Icon picker */}
           <div>
-            <label className="mb-1 block text-xs text-zinc-400">Icon</label>
+            <label className="mb-1 block text-xs text-muted-foreground">Icon</label>
             <div className="flex items-center gap-2">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-zinc-700 bg-zinc-800">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-muted">
                 <SelectedIcon className="h-4 w-4 text-cyan-400" />
               </div>
               <select
@@ -146,7 +146,7 @@ export function CreateComponentDialog({ open, onClose }: CreateComponentDialogPr
           {/* Capacity & Latency */}
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="mb-0.5 block text-[11px] text-zinc-500">Max QPS</label>
+              <label className="mb-0.5 block text-[11px] text-muted-foreground">Max QPS</label>
               <input
                 type="number"
                 min={1}
@@ -156,7 +156,7 @@ export function CreateComponentDialog({ open, onClose }: CreateComponentDialogPr
               />
             </div>
             <div>
-              <label className="mb-0.5 block text-[11px] text-zinc-500">Latency (ms)</label>
+              <label className="mb-0.5 block text-[11px] text-muted-foreground">Latency (ms)</label>
               <input
                 type="number"
                 min={0}
@@ -169,7 +169,7 @@ export function CreateComponentDialog({ open, onClose }: CreateComponentDialogPr
 
           {/* Flags */}
           <div className="grid grid-cols-2 gap-2">
-            <label className="flex cursor-pointer items-center gap-2 rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-2 text-xs text-zinc-300">
+            <label className="flex cursor-pointer items-center gap-2 rounded-md border border-border bg-muted px-2.5 py-2 text-xs text-foreground/80">
               <input
                 type="checkbox"
                 checked={scalable}
@@ -178,7 +178,7 @@ export function CreateComponentDialog({ open, onClose }: CreateComponentDialogPr
               />
               Scalable (can add replicas)
             </label>
-            <label className="flex cursor-pointer items-center gap-2 rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-2 text-xs text-zinc-300">
+            <label className="flex cursor-pointer items-center gap-2 rounded-md border border-border bg-muted px-2.5 py-2 text-xs text-foreground/80">
               <input
                 type="checkbox"
                 checked={stateful}
@@ -191,7 +191,7 @@ export function CreateComponentDialog({ open, onClose }: CreateComponentDialogPr
 
           {/* Description */}
           <div>
-            <label className="mb-1 block text-xs text-zinc-400">Description</label>
+            <label className="mb-1 block text-xs text-muted-foreground">Description</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -205,7 +205,7 @@ export function CreateComponentDialog({ open, onClose }: CreateComponentDialogPr
         <div className="mt-4 flex justify-end gap-2">
           <button
             onClick={onClose}
-            className="rounded-md px-3 py-1.5 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+            className="rounded-md px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             Cancel
           </button>

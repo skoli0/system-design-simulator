@@ -3,6 +3,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { safeLocalStorage } from "./safeStorage";
 
 export type ToastType = "success" | "error" | "info";
+export type Theme = "light" | "dark";
 
 interface ToastData {
   message: string;
@@ -11,6 +12,7 @@ interface ToastData {
 
 interface AppState {
   selectedProblemId: string;
+  theme: Theme;
   leftSidebarOpen: boolean;
   rightPanelOpen: boolean;
   activeLeftTab: "components" | "problems" | "learn";
@@ -18,6 +20,8 @@ interface AppState {
   toast: ToastData | null;
 
   setSelectedProblem: (id: string) => void;
+  setTheme: (theme: Theme) => void;
+  toggleTheme: () => void;
   toggleLeftSidebar: () => void;
   toggleRightPanel: () => void;
   setLeftSidebarOpen: (open: boolean) => void;
@@ -35,6 +39,7 @@ export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
       selectedProblemId: "url-shortener",
+      theme: "light",
       leftSidebarOpen: true,
       rightPanelOpen: true,
       activeLeftTab: "components",
@@ -42,6 +47,9 @@ export const useAppStore = create<AppState>()(
       toast: null,
 
       setSelectedProblem: (id) => set({ selectedProblemId: id }),
+      setTheme: (theme) => set({ theme }),
+      toggleTheme: () =>
+        set((s) => ({ theme: s.theme === "dark" ? "light" : "dark" })),
       toggleLeftSidebar: () =>
         set((s) => ({ leftSidebarOpen: !s.leftSidebarOpen })),
       toggleRightPanel: () =>
@@ -69,22 +77,22 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "systemsim-app",
-      version: 1,
+      version: 3,
       skipHydration: true,
       storage: createJSONStorage(() => safeLocalStorage),
-      // The app is dark-only; older persisted state may still contain a
-      // `theme` key — strip it so it never leaks back into the store.
-      migrate: (persisted) => {
-        if (persisted && typeof persisted === "object" && "theme" in persisted) {
-          const { theme: _theme, ...rest } = persisted as Record<string, unknown>;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          return rest as any;
+      migrate: (persisted, version) => {
+        const state = persisted as Record<string, unknown> | undefined;
+        if (!state) return persisted;
+        // v3: default theme is light for fresh installs only (keep saved preference)
+        if (version < 3 && state.theme === undefined) {
+          return { ...state, theme: "light" };
         }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return persisted as any;
       },
       partialize: (state) => ({
         selectedProblemId: state.selectedProblemId,
+        theme: state.theme,
       }),
     }
   )

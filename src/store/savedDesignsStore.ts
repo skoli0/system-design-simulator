@@ -1,13 +1,16 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import type { Node } from "@xyflow/react";
-import { useCanvasStore, type ComponentNodeData } from "./canvasStore";
 import { useAppStore } from "./appStore";
-import { usePenStore, type Stroke } from "./penStore";
-import { useSimulationStore } from "./simulationStore";
+import { useCanvasStore } from "./canvasStore";
 import { useCustomProblemsStore } from "./customProblemsStore";
 import { safeLocalStorage } from "./safeStorage";
 import { PROBLEMS } from "@/data/problems";
+import {
+  captureMyDesignSnapshot,
+  restoreSnapshotToCanvas,
+  type DesignSnapshot,
+} from "@/lib/designSnapshot";
+import type { Stroke } from "./penStore";
 
 export interface SerializedComponentData {
   componentId: string;
@@ -42,13 +45,27 @@ export interface SerializedEdge {
   data?: { label?: string; protocol?: string; async?: boolean };
 }
 
+export interface DesignVersion extends DesignSnapshot {
+  version: number;
+  savedAt: string;
+  label?: string;
+}
+
 export interface SavedDesign {
+  id: string;
+  name: string;
+  currentVersion: number;
+  versions: DesignVersion[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface LegacySavedDesign {
   id: string;
   name: string;
   problemId: string | null;
   nodes: SerializedNode[];
   edges: SerializedEdge[];
-  annotations: string[];
   strokes: Stroke[];
   createdAt: string;
   updatedAt: string;
@@ -56,14 +73,70 @@ export interface SavedDesign {
 
 export type ImportResult = { ok: true } | { ok: false; error: string };
 
+export interface SaveDesignOptions {
+  designId?: string;
+  label?: string;
+}
+
 interface SavedDesignsState {
   designs: SavedDesign[];
-  saveDesign: (name: string) => void;
-  loadDesign: (id: string) => void;
+  activeDesignId: string | null;
+  saveDesign: (name: string, options?: SaveDesignOptions) => string;
+  loadDesign: (id: string, version?: number) => void;
   deleteDesign: (id: string) => void;
   renameDesign: (id: string, name: string) => void;
   exportDesign: (id: string) => string;
   importDesign: (json: string) => ImportResult;
+  setActiveDesignId: (id: string | null) => void;
+  getDesignVersions: (id: string) => DesignVersion[];
+}
+
+export function getDesignVersion(
+  design: SavedDesign,
+  version?: number
+): DesignVersion | undefined {
+  const v = version ?? design.currentVersion;
+  return (
+    design.versions.find((entry) => entry.version === v) ??
+    design.versions[design.versions.length - 1]
+  );
+}
+
+export function designNodeCount(design: SavedDesign): number {
+  return getDesignVersion(design)?.nodes.length ?? 0;
+}
+
+function createVersionFromSnapshot(
+  snapshot: DesignSnapshot,
+  version: number,
+  label?: string
+): DesignVersion {
+  return {
+    version,
+    savedAt: new Date().toISOString(),
+    label,
+    ...snapshot,
+  };
+}
+
+function migrateLegacyDesign(d: LegacySavedDesign): SavedDesign {
+  const version = createVersionFromSnapshot(
+    {
+      problemId: d.problemId,
+      nodes: d.nodes,
+      edges: d.edges,
+      strokes: d.strokes ?? [],
+    },
+    1
+  );
+  return {
+    id: d.id,
+    name: d.name,
+    currentVersion: 1,
+    versions: [version],
+    createdAt: d.createdAt,
+    updatedAt: d.updatedAt,
+  };
 }
 
 export function serializeNodes(
@@ -120,8 +193,6 @@ export function serializeEdges(
   }));
 }
 
-/* ---------- import validation (no external deps) ---------- */
-
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -134,37 +205,35 @@ function num(v: unknown, fallback: number): number {
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
 }
 
-/**
- * Structurally validate an imported design and normalize it into the
- * SerializedNode/SerializedEdge shape (stripping unknown/runtime fields).
- * Accepts both the LoadDialog export envelope (a full SavedDesign) and the
- * top-bar exportAsJSON envelope ({ schemaVersion, name, problemId, nodes,
- * edges, strokes }).
- */
-function normalizeImportedDesign(parsed: unknown):
-  | {
-      ok: true;
-      name: string;
-      problemId: string | null;
-      nodes: SerializedNode[];
-      edges: SerializedEdge[];
-      strokes: Stroke[];
-    }
-  | { ok: false; error: string } {
-  if (!isRecord(parsed)) {
-    return { ok: false, error: "File is not a design object" };
-  }
-  if (!Array.isArray(parsed.nodes)) {
-    return { ok: false, error: "Missing or invalid \"nodes\" array" };
-  }
-  if (!Array.isArray(parsed.edges)) {
-    return { ok: false, error: "Missing or invalid \"edges\" array" };
-  }
+function parseStrokes(raw: unknown): Stroke[] {
+  if (!Array.isArray(raw)) return [];
+  return (raw as unknown[]).filter((s): s is Stroke => {
+    if (!isRecord(s)) return false;
+    if (typeof s.id !== "string") return false;
+    if (typeof s.color !== "string") return false;
+    if (typeof s.width !== "number" || !Number.isFinite(s.width)) return false;
+    return (
+      Array.isArray(s.points) &&
+      s.points.every(
+        (p) =>
+          Array.isArray(p) &&
+          p.length === 2 &&
+          typeof p[0] === "number" &&
+          typeof p[1] === "number" &&
+          Number.isFinite(p[0]) &&
+          Number.isFinite(p[1])
+      )
+    );
+  });
+}
 
+function parseNodesArray(parsedNodes: unknown[]):
+  | { ok: true; nodes: SerializedNode[] }
+  | { ok: false; error: string } {
   const nodes: SerializedNode[] = [];
   const nodeIds = new Set<string>();
-  for (let i = 0; i < parsed.nodes.length; i++) {
-    const raw = parsed.nodes[i];
+  for (let i = 0; i < parsedNodes.length; i++) {
+    const raw = parsedNodes[i];
     if (!isRecord(raw)) {
       return { ok: false, error: `Node ${i} is not an object` };
     }
@@ -223,10 +292,16 @@ function normalizeImportedDesign(parsed: unknown):
     }
     nodeIds.add(raw.id);
   }
+  return { ok: true, nodes };
+}
 
+function parseEdgesArray(
+  parsedEdges: unknown[],
+  nodeIds: Set<string>
+): { ok: true; edges: SerializedEdge[] } | { ok: false; error: string } {
   const edges: SerializedEdge[] = [];
-  for (let i = 0; i < parsed.edges.length; i++) {
-    const raw = parsed.edges[i];
+  for (let i = 0; i < parsedEdges.length; i++) {
+    const raw = parsedEdges[i];
     if (!isRecord(raw)) {
       return { ok: false, error: `Edge ${i} is not an object` };
     }
@@ -253,130 +328,175 @@ function normalizeImportedDesign(parsed: unknown):
       },
     });
   }
+  return { ok: true, edges };
+}
 
-  // Strokes are best-effort: drop anything malformed instead of rejecting.
-  const strokes: Stroke[] = Array.isArray(parsed.strokes)
-    ? (parsed.strokes as unknown[]).filter((s): s is Stroke => {
-        if (!isRecord(s)) return false;
-        if (typeof s.id !== "string") return false;
-        if (typeof s.color !== "string") return false;
-        if (typeof s.width !== "number" || !Number.isFinite(s.width)) return false;
-        return (
-          Array.isArray(s.points) &&
-          s.points.every(
-            (p) =>
-              Array.isArray(p) &&
-              p.length === 2 &&
-              typeof p[0] === "number" &&
-              typeof p[1] === "number" &&
-              Number.isFinite(p[0]) &&
-              Number.isFinite(p[1])
-          )
-        );
-      })
-    : [];
+function normalizeImportedDesign(parsed: unknown):
+  | {
+      ok: true;
+      name: string;
+      versions: DesignVersion[];
+      currentVersion: number;
+    }
+  | { ok: false; error: string } {
+  if (!isRecord(parsed)) {
+    return { ok: false, error: "File is not a design object" };
+  }
 
-  return {
-    ok: true,
-    name: str(parsed.name, "Untitled design"),
-    problemId: typeof parsed.problemId === "string" ? parsed.problemId : null,
-    nodes,
-    edges,
-    strokes,
-  };
+  const name = str(parsed.name, "Untitled design");
+
+  if (Array.isArray(parsed.versions) && parsed.versions.length > 0) {
+    const versions: DesignVersion[] = [];
+    for (let i = 0; i < parsed.versions.length; i++) {
+      const raw = parsed.versions[i];
+      if (!isRecord(raw)) {
+        return { ok: false, error: `Version ${i} is not an object` };
+      }
+      if (!Array.isArray(raw.nodes) || !Array.isArray(raw.edges)) {
+        return { ok: false, error: `Version ${i} is missing nodes or edges` };
+      }
+      const nodesResult = parseNodesArray(raw.nodes as unknown[]);
+      if (!nodesResult.ok) return nodesResult;
+      const nodeIds = new Set(nodesResult.nodes.map((n) => n.id));
+      const edgesResult = parseEdgesArray(raw.edges as unknown[], nodeIds);
+      if (!edgesResult.ok) return edgesResult;
+
+      versions.push({
+        version: num(raw.version, i + 1),
+        savedAt: str(raw.savedAt, new Date().toISOString()),
+        label: typeof raw.label === "string" ? raw.label : undefined,
+        problemId: typeof raw.problemId === "string" ? raw.problemId : null,
+        nodes: nodesResult.nodes,
+        edges: edgesResult.edges,
+        strokes: parseStrokes(raw.strokes),
+      });
+    }
+
+    const currentVersion =
+      typeof parsed.currentVersion === "number"
+        ? parsed.currentVersion
+        : versions[versions.length - 1].version;
+
+    return { ok: true, name, versions, currentVersion };
+  }
+
+  if (!Array.isArray(parsed.nodes)) {
+    return { ok: false, error: 'Missing or invalid "nodes" array' };
+  }
+  if (!Array.isArray(parsed.edges)) {
+    return { ok: false, error: 'Missing or invalid "edges" array' };
+  }
+
+  const nodesResult = parseNodesArray(parsed.nodes as unknown[]);
+  if (!nodesResult.ok) return nodesResult;
+  const nodeIds = new Set(nodesResult.nodes.map((n) => n.id));
+  const edgesResult = parseEdgesArray(parsed.edges as unknown[], nodeIds);
+  if (!edgesResult.ok) return edgesResult;
+
+  const version = createVersionFromSnapshot(
+    {
+      problemId: typeof parsed.problemId === "string" ? parsed.problemId : null,
+      nodes: nodesResult.nodes,
+      edges: edgesResult.edges,
+      strokes: parseStrokes(parsed.strokes),
+    },
+    1
+  );
+
+  return { ok: true, name, versions: [version], currentVersion: 1 };
 }
 
 export const useSavedDesignsStore = create<SavedDesignsState>()(
   persist(
     (set, get) => ({
       designs: [],
+      activeDesignId: null,
 
-      saveDesign: (name: string) => {
-        const { nodes, edges } = useCanvasStore.getState();
-        const { strokes } = usePenStore.getState();
-        const problemId = useAppStore.getState().selectedProblemId;
+      saveDesign: (name: string, options?: SaveDesignOptions) => {
+        const snapshot = captureMyDesignSnapshot();
         const now = new Date().toISOString();
-        const id = `design-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const existingId = options?.designId ?? get().activeDesignId;
 
+        if (existingId) {
+          const existing = get().designs.find((d) => d.id === existingId);
+          if (existing) {
+            const nextVersion =
+              Math.max(...existing.versions.map((v) => v.version), 0) + 1;
+            const version = createVersionFromSnapshot(
+              snapshot,
+              nextVersion,
+              options?.label
+            );
+
+            set((s) => ({
+              activeDesignId: existingId,
+              designs: s.designs.map((d) =>
+                d.id === existingId
+                  ? {
+                      ...d,
+                      name: name.trim() || d.name,
+                      currentVersion: nextVersion,
+                      versions: [...d.versions, version],
+                      updatedAt: now,
+                    }
+                  : d
+              ),
+            }));
+
+            useAppStore
+              .getState()
+              .showToast(
+                `"${existing.name}" saved as version ${nextVersion}`,
+                "success"
+              );
+            return existingId;
+          }
+        }
+
+        const id = `design-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const version = createVersionFromSnapshot(snapshot, 1, options?.label);
         const design: SavedDesign = {
           id,
           name,
-          problemId,
-          nodes: serializeNodes(nodes),
-          edges: serializeEdges(edges),
-          annotations: [],
-          strokes,
+          currentVersion: 1,
+          versions: [version],
           createdAt: now,
           updatedAt: now,
         };
 
-        set((s) => ({ designs: [design, ...s.designs] }));
+        set((s) => ({
+          activeDesignId: id,
+          designs: [design, ...s.designs],
+        }));
         useAppStore.getState().showToast(`Design "${name}" saved`, "success");
+        return id;
       },
 
-      loadDesign: (id: string) => {
+      loadDesign: (id: string, version?: number) => {
         const design = get().designs.find((d) => d.id === id);
         if (!design) return;
 
-        // Restore canvas state
-        const restoredNodes: Node[] = design.nodes.map((n) => {
-          if (n.type === "text") {
-            const textData = n.data as SerializedTextData;
-            return {
-              id: n.id,
-              type: n.type,
-              position: n.position,
-              connectable: false,
-              data: { text: textData.text ?? "", fontSize: textData.fontSize },
-            };
-          }
-          return {
-            id: n.id,
-            type: n.type,
-            position: n.position,
-            data: { ...n.data } as ComponentNodeData,
-          };
-        });
+        const entry = getDesignVersion(design, version);
+        if (!entry) return;
 
-        const restoredEdges = design.edges.map((e) => ({
-          id: e.id,
-          type: e.type,
-          source: e.source,
-          target: e.target,
-          sourceHandle: e.sourceHandle ?? undefined,
-          targetHandle: e.targetHandle ?? undefined,
-          data: {
-            label: e.data?.label ?? "",
-            protocol: e.data?.protocol ?? "http",
-            async: e.data?.async ?? false,
-          },
-        }));
+        restoreSnapshotToCanvas(entry);
+        set({ activeDesignId: id });
 
-        // Route through the tab system so a read-only reference tab is never
-        // clobbered: loading always (re)targets the "My Design" tab. addTab
-        // also clears node/edge selection and the undo history.
-        useCanvasStore.getState().addTab({
-          id: "my-design",
-          label: "My Design",
-          nodes: restoredNodes,
-          edges: restoredEdges,
-        });
-
-        // Stale simulation metrics/score refer to the previous canvas.
-        useSimulationStore.getState().reset();
-
-        usePenStore.getState().setStrokes(design.strokes ?? []);
-
-        // Restore problem selection if it exists
-        if (design.problemId) {
-          useAppStore.getState().setSelectedProblem(design.problemId);
-        }
-
-        useAppStore.getState().showToast(`Loaded "${design.name}"`, "success");
+        useAppStore
+          .getState()
+          .showToast(
+            version
+              ? `Loaded "${design.name}" (v${version})`
+              : `Loaded "${design.name}"`,
+            "success"
+          );
       },
 
       deleteDesign: (id: string) => {
-        set((s) => ({ designs: s.designs.filter((d) => d.id !== id) }));
+        set((s) => ({
+          designs: s.designs.filter((d) => d.id !== id),
+          activeDesignId: s.activeDesignId === id ? null : s.activeDesignId,
+        }));
       },
 
       renameDesign: (id: string, name: string) => {
@@ -392,7 +512,7 @@ export const useSavedDesignsStore = create<SavedDesignsState>()(
       exportDesign: (id: string) => {
         const design = get().designs.find((d) => d.id === id);
         if (!design) return "{}";
-        return JSON.stringify({ schemaVersion: 1, ...design }, null, 2);
+        return JSON.stringify({ schemaVersion: 2, ...design }, null, 2);
       },
 
       importDesign: (json: string): ImportResult => {
@@ -416,11 +536,8 @@ export const useSavedDesignsStore = create<SavedDesignsState>()(
         const design: SavedDesign = {
           id: `design-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           name: `${result.name} (imported)`,
-          problemId: result.problemId,
-          nodes: result.nodes,
-          edges: result.edges,
-          annotations: [],
-          strokes: result.strokes,
+          currentVersion: result.currentVersion,
+          versions: result.versions,
           createdAt: now,
           updatedAt: now,
         };
@@ -429,19 +546,41 @@ export const useSavedDesignsStore = create<SavedDesignsState>()(
         useAppStore.getState().showToast("Design imported", "success");
         return { ok: true };
       },
+
+      setActiveDesignId: (id: string | null) => set({ activeDesignId: id }),
+
+      getDesignVersions: (id: string) => {
+        const design = get().designs.find((d) => d.id === id);
+        if (!design) return [];
+        return [...design.versions].sort((a, b) => b.version - a.version);
+      },
     }),
     {
       name: "systemsim-saved-designs",
-      version: 1,
+      version: 2,
       skipHydration: true,
       storage: createJSONStorage(() => safeLocalStorage),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      migrate: (state) => state as any,
+      migrate: (persisted, version) => {
+        const state = (persisted ?? {}) as Record<string, unknown>;
+        if (version < 2 && Array.isArray(state.designs)) {
+          state.designs = (state.designs as unknown[]).map((raw) => {
+            const d = raw as Record<string, unknown>;
+            if (Array.isArray(d.versions) && typeof d.currentVersion === "number") {
+              return raw as SavedDesign;
+            }
+            return migrateLegacyDesign(raw as LegacySavedDesign);
+          });
+        }
+        if (state.activeDesignId === undefined) {
+          state.activeDesignId = null;
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return state as any;
+      },
     }
   )
 );
 
-/** Helper: get problem title by id (built-in or custom problems). */
 export function getProblemTitle(problemId: string | null): string {
   if (!problemId) return "No problem";
   const builtin = PROBLEMS.find((p) => p.id === problemId)?.title;

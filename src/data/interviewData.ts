@@ -14,7 +14,7 @@ export interface FollowUpQuestion {
 }
 
 export interface ReferenceAPI {
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'WS';
   path: string;
   description: string;
   requestBody?: string;
@@ -3128,6 +3128,160 @@ export const INTERVIEW_DATA: ProblemInterviewData[] = [
       readWriteRatio: "2:1 reads:writes on the API (status polling, log viewing) — but log ingestion is the real write volume, far exceeding control-plane writes",
       storagePerItem: "Logs ~5-10 MB/job and artifacts ~100 MB/run before dedup — tens of TB/day; content-addressing plus aggressive retention keeps the stored footprint a fraction of that",
       peakMultiplier: "3x weekday working hours, Monday morning merge rushes; near-zero weekend troughs make autoscaling pay for itself",
+    },
+  },
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 36. RAG Q&A SYSTEM
+  // ─────────────────────────────────────────────────────────────────────────────
+  {
+    problemId: "rag-qa-system",
+    requirements: [
+      { id: "r1", text: "Upload and ingest documents (PDF, DOCX, HTML, Markdown)", category: "functional", importance: "critical" },
+      { id: "r2", text: "Natural-language Q&A with answers grounded in retrieved passages", category: "functional", importance: "critical" },
+      { id: "r3", text: "Citations linking each answer claim to source document + page/chunk", category: "functional", importance: "critical" },
+      { id: "r4", text: "Incremental indexing — new/updated docs without full re-index downtime", category: "functional", importance: "important" },
+      { id: "r5", text: "Multi-tenant access control — users only see authorized documents", category: "functional", importance: "critical" },
+      { id: "r6", text: "End-to-end query latency < 5s at p95", category: "non-functional", importance: "critical" },
+      { id: "r7", text: "Hybrid retrieval (vector + keyword) for high recall", category: "non-functional", importance: "important" },
+      { id: "r8", text: "Token budgets and rate limits per user/tenant", category: "non-functional", importance: "critical" },
+    ],
+    followUpQuestions: [
+      { id: "q1", question: "How do you handle document updates without serving stale answers?", category: "consistency", hint: "Think about versioning and re-embedding", answer: "Version each document. On update, enqueue a re-index job: delete old chunks from vector DB, re-chunk, re-embed, upsert new vectors. During re-index, serve answers from the previous version with a 'document updated' flag. TTL-based cache invalidation on query results keyed by doc version hash." },
+      { id: "q2", question: "What chunking strategy do you use and why?", category: "optimization", hint: "Fixed vs semantic chunking", answer: "Start with 512-token chunks with 50-token overlap for general text. For structured docs, use heading-aware semantic chunking (split on H1/H2 boundaries). Store chunk metadata (doc_id, section, page) for citations. Evaluate recall@k on a golden query set — chunking quality is the biggest lever for RAG accuracy." },
+      { id: "q3", question: "How do you prevent the LLM from hallucinating?", category: "failure", hint: "Prompt engineering + retrieval confidence", answer: "Strict system prompt requiring answers only from provided context. Include retrieval scores — if top chunk similarity < threshold, respond 'I don't have enough information.' Require the LLM to cite chunk IDs inline. Post-generation check: verify cited chunks actually support the claims." },
+      { id: "q4", question: "How would you scale to 100M documents?", category: "scale", hint: "Sharding vector DB + async ingestion", answer: "Shard vector DB by tenant_id or doc_id hash. Horizontal-scale embedding workers behind a queue — batch embed 100 chunks/request for GPU efficiency. Separate hot (recently queried) and cold tiers. Use approximate nearest-neighbor with tunable recall/latency tradeoff. Elasticsearch for keyword leg of hybrid search." },
+      { id: "q5", question: "How do you control LLM inference costs?", category: "optimization", hint: "Caching, model routing, token limits", answer: "Cache LLM responses keyed by (query_hash + top_k_chunk_ids). Route simple factual queries to smaller models. Set per-user daily token budgets in Redis. Limit retrieved context to top-5 chunks (~2K tokens). Log cost per query for anomaly detection." },
+    ],
+    referenceAPIs: [
+      { method: "POST", path: "/api/v1/documents", description: "Upload document for ingestion", requestBody: "{ file: binary, tenantId: string, metadata?: object }", response: "{ documentId: string, status: 'processing' }" },
+      { method: "GET", path: "/api/v1/documents/{id}/status", description: "Check ingestion/indexing status", response: "{ status: 'processing' | 'indexed' | 'failed', chunkCount: number }" },
+      { method: "POST", path: "/api/v1/query", description: "Ask a question against the knowledge base", requestBody: "{ query: string, tenantId: string, filters?: object }", response: "{ answer: string, citations: [{ chunkId, docId, excerpt, score }], latencyMs: number }" },
+      { method: "DELETE", path: "/api/v1/documents/{id}", description: "Remove document and its embeddings", response: "{ success: boolean }" },
+    ],
+    dataModel: [
+      {
+        name: "documents",
+        type: "nosql",
+        fields: [
+          { name: "document_id", type: "uuid" },
+          { name: "tenant_id", type: "string", note: "Multi-tenant isolation key" },
+          { name: "title", type: "string" },
+          { name: "storage_key", type: "string", note: "Object storage path to raw file" },
+          { name: "version", type: "int", note: "Incremented on each update" },
+          { name: "status", type: "enum", note: "processing, indexed, failed" },
+          { name: "acl", type: "json", note: "User/group permissions" },
+        ],
+        partitionKey: "tenant_id",
+        indexes: ["status", "created_at"],
+      },
+      {
+        name: "chunks",
+        type: "search",
+        fields: [
+          { name: "chunk_id", type: "uuid" },
+          { name: "document_id", type: "uuid" },
+          { name: "text", type: "text", note: "Chunk content for BM25 keyword search" },
+          { name: "vector_id", type: "string", note: "Reference to vector DB entry" },
+          { name: "metadata", type: "json", note: "page, section, token_count" },
+        ],
+        indexes: ["document_id", "text (full-text)"],
+      },
+      {
+        name: "query_log",
+        type: "nosql",
+        fields: [
+          { name: "query_id", type: "uuid" },
+          { name: "user_id", type: "string" },
+          { name: "query_text", type: "string" },
+          { name: "retrieved_chunks", type: "json" },
+          { name: "answer", type: "text" },
+          { name: "tokens_used", type: "int" },
+          { name: "latency_ms", type: "int" },
+        ],
+        partitionKey: "user_id",
+      },
+    ],
+    estimationHints: {
+      dailyActiveUsers: "10M DAU asking ~5 queries/day = 50M queries/day ≈ 580 QPS avg, ~3K QPS peak",
+      readWriteRatio: "10:1 reads:writes — queries dominate; ingestion is bursty during bulk uploads",
+      storagePerItem: "~50KB avg document → 50M docs = 2.5 PB raw; embeddings add ~6KB/chunk × 10 chunks/doc = 3TB vector data",
+      peakMultiplier: "5x during business hours; Monday morning bulk uploads spike write load",
+    },
+  },
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 37. AI CHAT ASSISTANT
+  // ─────────────────────────────────────────────────────────────────────────────
+  {
+    problemId: "ai-chat-assistant",
+    requirements: [
+      { id: "r1", text: "Multi-turn conversational chat with context retention", category: "functional", importance: "critical" },
+      { id: "r2", text: "Streaming responses (token-by-token) via WebSocket or SSE", category: "functional", importance: "critical" },
+      { id: "r3", text: "Conversation history persisted and synced across devices", category: "functional", importance: "critical" },
+      { id: "r4", text: "File/image upload for analysis within conversations", category: "functional", importance: "important" },
+      { id: "r5", text: "Optional tool calling (web search, code execution)", category: "functional", importance: "nice-to-have" },
+      { id: "r6", text: "First-token latency < 500ms at p95", category: "non-functional", importance: "critical" },
+      { id: "r7", text: "Content moderation on input and output", category: "non-functional", importance: "critical" },
+      { id: "r8", text: "Per-user rate limits and token budgets", category: "non-functional", importance: "critical" },
+    ],
+    followUpQuestions: [
+      { id: "q1", question: "How do you manage long conversation context windows?", category: "scale", hint: "Summarization vs sliding window", answer: "Store all messages in NoSQL. Before each LLM call, assemble: system prompt + last 10 turns + summary of older turns. When total tokens exceed model limit (128K), summarize turns 1-N into a compact summary message. Cache the summary and update incrementally as new turns arrive." },
+      { id: "q2", question: "How does streaming work end-to-end?", category: "optimization", hint: "WebSocket + SSE from LLM provider", answer: "Client opens WebSocket to our server. Server calls LLM gateway which opens SSE to the provider. As tokens arrive, gateway forwards each chunk over WebSocket to client. Client renders incrementally. On disconnect, server continues generation and stores the full response — client can resume." },
+      { id: "q3", question: "What happens when the LLM provider is rate-limited?", category: "failure", hint: "Fallback models + queue", answer: "LLM gateway tries primary model → on 429, fallback to secondary provider/model → if all fail, enqueue request and return 'thinking...' with retry. Circuit breaker opens after N consecutive failures. Cache popular system prompts to reduce provider load." },
+      { id: "q4", question: "How do you control inference costs at 100M DAU?", category: "optimization", hint: "Model routing + caching + budgets", answer: "Classify query complexity: simple → GPT-4o-mini ($0.15/1M tokens), complex → GPT-4o ($2.50/1M tokens). Cache identical prompts. Per-user daily token budget (free: 10K tokens/day, paid: 1M). Rate limit: 20 messages/min free tier. Track cost per conversation in monitoring." },
+      { id: "q5", question: "How do you implement tool calling safely?", category: "security", hint: "Sandboxed execution + timeouts", answer: "LLM returns structured JSON: { tool: 'web_search', args: { query: '...' } }. App server validates tool name against allowlist, executes in sandboxed environment with 5s timeout and circuit breaker. Feed result back to LLM for final answer. Never execute arbitrary code from LLM output without sandboxing." },
+    ],
+    referenceAPIs: [
+      { method: "POST", path: "/api/v1/conversations", description: "Create a new conversation", requestBody: "{ title?: string }", response: "{ conversationId: string, createdAt: ISO8601 }" },
+      { method: "GET", path: "/api/v1/conversations", description: "List user's conversations (paginated)", response: "{ conversations: [{ id, title, updatedAt }], nextCursor: string }" },
+      { method: "POST", path: "/api/v1/conversations/{id}/messages", description: "Send a message (returns streaming WebSocket URL)", requestBody: "{ content: string, attachments?: [{ type, url }] }", response: "{ messageId: string, streamUrl: string }" },
+      { method: "WS", path: "/ws/conversations/{id}/stream", description: "WebSocket for streaming LLM response tokens", response: "{ type: 'token' | 'done' | 'error', content: string }" },
+      { method: "DELETE", path: "/api/v1/conversations/{id}", description: "Delete conversation and all messages", response: "{ success: boolean }" },
+    ],
+    dataModel: [
+      {
+        name: "conversations",
+        type: "nosql",
+        fields: [
+          { name: "conversation_id", type: "uuid" },
+          { name: "user_id", type: "string" },
+          { name: "title", type: "string", note: "Auto-generated from first message" },
+          { name: "model", type: "string", note: "gpt-4o, claude-3.5, etc." },
+          { name: "token_count", type: "int", note: "Running total for budget tracking" },
+          { name: "summary", type: "text", note: "Compressed history of older turns" },
+        ],
+        partitionKey: "user_id",
+        indexes: ["updated_at DESC"],
+      },
+      {
+        name: "messages",
+        type: "nosql",
+        fields: [
+          { name: "message_id", type: "uuid" },
+          { name: "conversation_id", type: "uuid" },
+          { name: "role", type: "enum", note: "user, assistant, system, tool" },
+          { name: "content", type: "text" },
+          { name: "tokens", type: "int" },
+          { name: "attachments", type: "json", note: "File references in object storage" },
+        ],
+        partitionKey: "conversation_id",
+        indexes: ["created_at ASC"],
+      },
+      {
+        name: "user_budgets",
+        type: "cache",
+        fields: [
+          { name: "user_id", type: "string" },
+          { name: "tokens_used_today", type: "int" },
+          { name: "messages_this_minute", type: "int" },
+          { name: "tier", type: "enum", note: "free, pro, enterprise" },
+        ],
+      },
+    ],
+    estimationHints: {
+      dailyActiveUsers: "100M DAU × ~10 messages/day = 1B messages/day ≈ 12K QPS avg, ~60K QPS peak",
+      readWriteRatio: "3:1 reads:writes — loading conversation history + streaming responses vs new messages",
+      storagePerItem: "~500 bytes/message × 10 msgs/conversation × 50 conversations/user = 250KB/user; 100M DAU = 25TB",
+      peakMultiplier: "4x evening hours (7-11 PM local time zones); viral events can spike 20x briefly",
     },
   },
 ];

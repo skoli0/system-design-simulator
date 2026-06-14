@@ -58,6 +58,8 @@ export const LEARNING_PATH: LearningTier[] = [
       "tiktok",
       "message-queue-design",
       "digital-wallet",
+      "rag-qa-system",
+      "ai-chat-assistant",
     ],
   },
 ];
@@ -243,5 +245,15 @@ export const PROBLEM_CONCEPTS: ConceptPrerequisite[] = [
     problemId: "digital-wallet",
     concepts: ["double-entry-ledger", "exactly-once-execution", "reconciliation"],
     prerequisites: ["idempotency", "saga-pattern", "ledger", "distributed-locking"],
+  },
+  {
+    problemId: "rag-qa-system",
+    concepts: ["vector-search", "chunking", "hybrid-retrieval", "grounded-generation"],
+    prerequisites: ["caching", "message-queue", "async-processing", "search-indexing"],
+  },
+  {
+    problemId: "ai-chat-assistant",
+    concepts: ["streaming-inference", "context-window", "model-routing", "token-budgets"],
+    prerequisites: ["websocket", "caching", "rate-limiting", "message-queue"],
   },
 ];

@@ -16,6 +16,10 @@ interface SaveDialogProps {
 export function SaveDialog({ open, onClose }: SaveDialogProps) {
   const selectedProblemId = useAppStore((s) => s.selectedProblemId);
   const saveDesign = useSavedDesignsStore((s) => s.saveDesign);
+  const activeDesignId = useSavedDesignsStore((s) => s.activeDesignId);
+  const activeDesign = useSavedDesignsStore((s) =>
+    s.designs.find((d) => d.id === s.activeDesignId)
+  );
   const customProblems = useCustomProblemsStore((s) => s.problems);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -23,20 +27,21 @@ export function SaveDialog({ open, onClose }: SaveDialogProps) {
     PROBLEMS.find((p) => p.id === selectedProblemId)?.title ??
     customProblems.find((p) => p.id === selectedProblemId)?.title ??
     "Design";
-  const defaultName = `${problemTitle} - ${new Date().toLocaleString()}`;
+  const defaultName =
+    activeDesign?.name ?? `${problemTitle} - ${new Date().toLocaleString()}`;
 
   const [name, setName] = useState(defaultName);
+  const [saveAsNew, setSaveAsNew] = useState(false);
   const [prevOpen, setPrevOpen] = useState(false);
 
-  // Reset name when dialog opens
   if (open && !prevOpen) {
-    setName(`${problemTitle} - ${new Date().toLocaleString()}`);
+    setName(activeDesign?.name ?? `${problemTitle} - ${new Date().toLocaleString()}`);
+    setSaveAsNew(false);
     setPrevOpen(true);
   } else if (!open && prevOpen) {
     setPrevOpen(false);
   }
 
-  // Focus input after dialog opens
   useEffect(() => {
     if (open) {
       setTimeout(() => inputRef.current?.select(), 50);
@@ -46,7 +51,13 @@ export function SaveDialog({ open, onClose }: SaveDialogProps) {
   const handleSave = () => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    saveDesign(trimmed);
+
+    if (activeDesignId && !saveAsNew) {
+      saveDesign(trimmed, { designId: activeDesignId });
+    } else {
+      useSavedDesignsStore.getState().setActiveDesignId(null);
+      saveDesign(trimmed);
+    }
     onClose();
   };
 
@@ -57,20 +68,52 @@ export function SaveDialog({ open, onClose }: SaveDialogProps) {
     }
   };
 
+  const nextVersion = activeDesign
+    ? activeDesign.currentVersion + 1
+    : 1;
+
   return (
     <ModalShell open={open} onClose={onClose} panelClassName="max-w-md p-6" ariaLabel="Save design">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-zinc-100">Save Design</h2>
+        <h2 className="text-sm font-semibold text-foreground">Save Design</h2>
         <button
           onClick={onClose}
-          className="flex h-6 w-6 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+          className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground/80"
           aria-label="Close"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      <label className="mb-1.5 block text-xs text-zinc-400">
+      {activeDesign && (
+        <div className="mb-4 space-y-2 rounded-md border border-border bg-muted/50 px-3 py-2.5">
+          <p className="text-xs text-muted-foreground">
+            Active design: <span className="font-medium text-foreground">{activeDesign.name}</span>
+          </p>
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-foreground/80">
+            <input
+              type="radio"
+              name="save-mode"
+              checked={!saveAsNew}
+              onChange={() => setSaveAsNew(false)}
+              className="accent-cyan-500"
+            />
+            Save as version {nextVersion}
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-foreground/80">
+            <input
+              type="radio"
+              name="save-mode"
+              checked={saveAsNew}
+              onChange={() => setSaveAsNew(true)}
+              className="accent-cyan-500"
+            />
+            Save as new design
+          </label>
+        </div>
+      )}
+
+      <label className="mb-1.5 block text-xs text-muted-foreground">
         Design name
       </label>
       <input
@@ -80,14 +123,14 @@ export function SaveDialog({ open, onClose }: SaveDialogProps) {
         onChange={(e) => setName(e.target.value)}
         onKeyDown={handleKeyDown}
         data-autofocus
-        className="mb-4 w-full rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-cyan-500"
+        className="mb-4 w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-cyan-500"
         placeholder="My awesome design..."
       />
 
       <div className="flex justify-end gap-2">
         <button
           onClick={onClose}
-          className="rounded-md px-3 py-1.5 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+          className="rounded-md px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           Cancel
         </button>
@@ -96,7 +139,7 @@ export function SaveDialog({ open, onClose }: SaveDialogProps) {
           disabled={!name.trim()}
           className="rounded-md bg-cyan-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-cyan-500 disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          Save
+          {activeDesign && !saveAsNew ? `Save v${nextVersion}` : "Save"}
         </button>
       </div>
     </ModalShell>

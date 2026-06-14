@@ -7,7 +7,6 @@ import type { CategoryScore, ScoringGraph } from "@/types/scoring";
 // monitoring 2 = 20
 export function scoreTradeoffs(
   nodes: Node<ComponentNodeData>[],
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _edges: Edge[],
   graph: ScoringGraph
 ): CategoryScore {
@@ -41,7 +40,7 @@ export function scoreTradeoffs(
   // Polyglot persistence (3 pts) — multiple durable storage types suited to
   // different access patterns. Cache is excluded: cache+DB is already
   // rewarded above as read/write separation.
-  const polyglotTypes = ["sql-db", "nosql-db", "timeseries-db", "graph-db", "search", "object-storage"];
+  const polyglotTypes = ["sql-db", "nosql-db", "timeseries-db", "graph-db", "search", "object-storage", "vector-db"];
   const storageTypes = new Set<string>();
   for (const n of connectedNodes) {
     if (polyglotTypes.includes(n.data.componentId)) storageTypes.add(n.data.componentId);
