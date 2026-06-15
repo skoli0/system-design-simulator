@@ -37,6 +37,8 @@ import { nextDesignTabLabel } from "@/lib/designTabNames";
 import { getProblemById } from "@/data/problems";
 import { migrateLegacyTabs } from "@/lib/tabMigration";
 import { indexedDbStorage } from "@/lib/indexedDbStorage";
+import { LEARN_TAB_ID } from "@/lib/conceptSimulations/constants";
+import { getConceptSimulation } from "@/data/conceptSimulations";
 import { useSimulationStore } from "./simulationStore";
 import { useTradeoffStore, type TradeoffEntry } from "./tradeoffStore";
 import type { ScoreResult } from "@/types/scoring";
@@ -107,6 +109,8 @@ export interface CanvasTab {
   nodes: Node[];
   edges: Edge[];
   readOnly?: boolean;
+  /** Concept learn simulation opened from the Learn tab */
+  conceptSimulationId?: string;
   /** Editable design tabs carry their own requirements (My Design uses the selected problem). */
   requirements?: ProblemRequirements;
   constraints?: string[];
@@ -238,6 +242,14 @@ interface CanvasState {
   tabs: CanvasTab[];
   activeTabId: string | null;
   addTab: (tab: CanvasTab, options?: { activate?: boolean }) => void;
+  /** Open or update the single shared Learn tutorial tab. */
+  openLearnTab: (payload: {
+    label: string;
+    nodes: Node[];
+    edges: Edge[];
+    conceptSimulationId: string;
+  }) => void;
+  refreshLearnTabContent: (nodes: Node[], edges: Edge[]) => void;
   switchTab: (tabId: string) => void;
   closeTab: (tabId: string) => void;
   renameTab: (tabId: string, label: string) => void;
@@ -356,6 +368,60 @@ export const useCanvasStore = create<CanvasState>()(
             isDragging: false,
             alignmentGuides: [],
           };
+        });
+      },
+
+      openLearnTab: ({ label, nodes, edges, conceptSimulationId }) => {
+        set((state) => {
+          let updatedTabs = snapshotActiveTabExtras(
+            state.tabs,
+            state.activeTabId,
+            state.nodes,
+            state.edges,
+          );
+          // Remove legacy per-concept tabs; one shared Learn tab only
+          updatedTabs = updatedTabs.filter(
+            (t) => t.id === LEARN_TAB_ID || !t.id.startsWith("concept-"),
+          );
+
+          const learnTab: CanvasTab = {
+            id: LEARN_TAB_ID,
+            label,
+            nodes,
+            edges,
+            readOnly: true,
+            conceptSimulationId,
+          };
+
+          const hasLearn = updatedTabs.some((t) => t.id === LEARN_TAB_ID);
+          updatedTabs = hasLearn
+            ? updatedTabs.map((t) => (t.id === LEARN_TAB_ID ? learnTab : t))
+            : [...updatedTabs, learnTab];
+
+          restoreTabExtras(learnTab);
+          resetSimulation();
+
+          return {
+            tabs: updatedTabs,
+            activeTabId: LEARN_TAB_ID,
+            nodes,
+            edges,
+            ...clearedSelectionState(),
+            history: [],
+            future: [],
+            isDragging: false,
+            alignmentGuides: [],
+          };
+        });
+      },
+
+      refreshLearnTabContent: (nodes, edges) => {
+        set((state) => {
+          if (state.activeTabId !== LEARN_TAB_ID) return state;
+          const tabs = state.tabs.map((t) =>
+            t.id === LEARN_TAB_ID ? { ...t, nodes, edges } : t,
+          );
+          return { tabs, nodes, edges, ...clearedSelectionState() };
         });
       },
 
@@ -1163,17 +1229,30 @@ export const useCanvasStore = create<CanvasState>()(
       partialize: (state) => ({
         nodes: state.activeTabId ? stripRuntimeFields(state.nodes) : [],
         edges: state.activeTabId ? state.edges : [],
-        tabs: state.tabs.map((t) =>
-          t.id === state.activeTabId && state.activeTabId
-            ? {
-                ...t,
-                nodes: [],
-                edges: [],
-                scoreResult: useSimulationStore.getState().scoreResult,
-                tradeoffEntries: useTradeoffStore.getState().entries,
-              }
-            : { ...t, nodes: stripRuntimeFields(t.nodes) }
-        ),
+        tabs: state.tabs.map((t) => {
+          const isActive = t.id === state.activeTabId && state.activeTabId;
+          const isLearn = t.id === LEARN_TAB_ID;
+          if (isActive && isLearn) {
+            return {
+              ...t,
+              nodes: stripRuntimeFields(state.nodes),
+              edges: state.edges,
+            };
+          }
+          if (isActive) {
+            return {
+              ...t,
+              nodes: [],
+              edges: [],
+              scoreResult: useSimulationStore.getState().scoreResult,
+              tradeoffEntries: useTradeoffStore.getState().entries,
+            };
+          }
+          if (isLearn && t.conceptSimulationId) {
+            return { ...t, nodes: stripRuntimeFields(t.nodes) };
+          }
+          return { ...t, nodes: stripRuntimeFields(t.nodes) };
+        }),
         activeTabId: state.activeTabId,
         defaultEdgePathStyle: state.defaultEdgePathStyle,
       }),
@@ -1192,15 +1271,31 @@ export const useCanvasStore = create<CanvasState>()(
           merged.edges ?? [],
         );
 
-        merged.tabs = migrated.tabs.map((t) => ({
-          ...t,
-          capacity: t.capacity ?? { ...DEFAULT_CAPACITY_SETTINGS },
-          tradeoffEntries: t.tradeoffEntries ?? [],
-          scoreResult: t.scoreResult ?? null,
-          ...(t.id === migrated.activeTabId && migrated.activeTabId
-            ? { nodes: migrated.nodes, edges: migrated.edges }
-            : {}),
-        }));
+        merged.tabs = migrated.tabs
+          .filter((t) => t.id === LEARN_TAB_ID || !t.id.startsWith("concept-"))
+          .map((t) => {
+            let tab = {
+              ...t,
+              capacity: t.capacity ?? { ...DEFAULT_CAPACITY_SETTINGS },
+              tradeoffEntries: t.tradeoffEntries ?? [],
+              scoreResult: t.scoreResult ?? null,
+              ...(t.id === migrated.activeTabId && migrated.activeTabId
+                ? { nodes: migrated.nodes, edges: migrated.edges }
+                : {}),
+            };
+            if (
+              tab.id === LEARN_TAB_ID &&
+              tab.conceptSimulationId &&
+              tab.nodes.length === 0
+            ) {
+              const def = getConceptSimulation(tab.conceptSimulationId);
+              if (def) {
+                const graph = def.build();
+                tab = { ...tab, nodes: graph.nodes, edges: graph.edges };
+              }
+            }
+            return tab;
+          });
         merged.activeTabId = migrated.activeTabId;
         merged.nodes = migrated.activeTabId ? migrated.nodes : [];
         merged.edges = migrated.activeTabId ? migrated.edges : [];

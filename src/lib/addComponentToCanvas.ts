@@ -44,6 +44,13 @@ export function focusActiveDesignOnCanvas(): void {
   }
 }
 
+/** Re-fit viewport on the Learn tab without creating a design tab. */
+export function focusLearnTabOnCanvas(): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("canvas:fitview"));
+  }
+}
+
 /**
  * Copy the current problem's reference architecture into the active design
  * as an editable canvas. No-op when the design already has components.

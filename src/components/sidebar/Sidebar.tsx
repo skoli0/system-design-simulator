@@ -12,6 +12,8 @@ interface SidebarProps {
   onCreateCustomComponent?: () => void;
   /** Called after a component is added from the palette (closes the mobile drawer). */
   onComponentAdded?: () => void;
+  /** Called after a learn-path problem/simulation is opened (closes the mobile drawer). */
+  onLearnItemSelected?: () => void;
   variant?: "desktop" | "mobile";
 }
 
@@ -19,10 +21,12 @@ function SidebarTabs({
   onCreateProblem,
   onCreateCustomComponent,
   onComponentAdded,
+  onLearnItemSelected,
 }: {
   onCreateProblem?: () => void;
   onCreateCustomComponent?: () => void;
   onComponentAdded?: () => void;
+  onLearnItemSelected?: () => void;
 }) {
   const activeLeftTab = useAppStore((s) => s.activeLeftTab);
   const setActiveLeftTab = useAppStore((s) => s.setActiveLeftTab);
@@ -61,7 +65,7 @@ function SidebarTabs({
       </TabsContent>
 
       <TabsContent value="learn" className="mt-0 flex-1 min-h-0 overflow-hidden">
-        <LearningPath />
+        <LearningPath onProblemSelected={onLearnItemSelected} />
       </TabsContent>
     </Tabs>
   );
@@ -72,6 +76,7 @@ export function Sidebar({
   onCreateProblem,
   onCreateCustomComponent,
   onComponentAdded,
+  onLearnItemSelected,
   variant = "desktop",
 }: SidebarProps) {
   if (variant === "mobile") {
@@ -81,6 +86,7 @@ export function Sidebar({
           onCreateProblem={onCreateProblem}
           onCreateCustomComponent={onCreateCustomComponent}
           onComponentAdded={onComponentAdded}
+          onLearnItemSelected={onLearnItemSelected}
         />
       </div>
     );

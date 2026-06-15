@@ -7,6 +7,7 @@ import {
   type EdgeProps,
 } from "@xyflow/react";
 import { useSimulationStore } from "@/store/simulationStore";
+import { useConceptSimulationStore } from "@/store/conceptSimulationStore";
 import {
   useCanvasStore,
   isEditableDesignTab,
@@ -42,6 +43,8 @@ function AnimatedEdgeInner({
 }: EdgeProps) {
   const isRunning = useSimulationStore((s) => s.isRunning);
   const trafficActive = useSimulationStore((s) => s.trafficActive);
+  const conceptSimActive = useConceptSimulationStore((s) => s.simulationId !== null);
+  const conceptActiveEdges = useConceptSimulationStore((s) => s.activeEdgeIds);
   const defaultEdgePathStyle = useCanvasStore((s) => s.defaultEdgePathStyle);
   const selectedEdgeIds = useCanvasStore((s) => s.selectedEdgeIds);
   const nodes = useCanvasStore((s) => s.nodes);
@@ -49,7 +52,13 @@ function AnimatedEdgeInner({
   const setDefaultEdgePathStyle = useCanvasStore((s) => s.setDefaultEdgePathStyle);
   const activeTab = useCanvasStore((s) => s.tabs.find((t) => t.id === s.activeTabId));
   const isEditable = isEditableDesignTab(activeTab);
-  const showFlow = isRunning || trafficActive;
+  const showFlowBase = isRunning || trafficActive;
+  const conceptEdgeActive =
+    !conceptSimActive ||
+    conceptActiveEdges === undefined ||
+    conceptActiveEdges.includes(id);
+  const showFlow = showFlowBase && conceptEdgeActive;
+  const isDimmed = conceptSimActive && showFlowBase && !conceptEdgeActive;
 
   const edgeData = (data ?? {}) as CustomEdgeData;
   const sourceNode = nodes.find((n) => n.id === source);
@@ -89,7 +98,11 @@ function AnimatedEdgeInner({
     [id, updateEdgeData, setDefaultEdgePathStyle],
   );
 
-  const strokeColor = showFlow ? "rgb(6, 182, 212)" : "rgb(82, 82, 91)";
+  const strokeColor = showFlow
+    ? "rgb(6, 182, 212)"
+    : isDimmed
+      ? "rgb(63, 63, 70)"
+      : "rgb(82, 82, 91)";
 
   return (
     <g>

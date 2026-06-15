@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import type { ComponentNodeData } from "@/store/canvasStore";
 import { useCanvasStore } from "@/store/canvasStore";
 import { useSimulationStore } from "@/store/simulationStore";
+import { useConceptSimulationStore } from "@/store/conceptSimulationStore";
 import { Server } from "lucide-react";
 import { ICON_MAP } from "@/lib/icons";
 import { sanitizeShards, supportsDbScaling } from "@/engine/dbScaling";
@@ -45,6 +46,11 @@ function ComponentNodeInner({ id, data, selected }: NodeProps<ComponentNode>) {
   const utilization = nodeData.utilization ?? 0;
   const trafficActive = useSimulationStore((s) => s.trafficActive);
   const isSimulating = useSimulationStore((s) => s.isRunning);
+  const conceptHighlight = useConceptSimulationStore((s) => s.activeNodeIds);
+  const conceptSimActive = useConceptSimulationStore((s) => s.simulationId !== null);
+  const isConceptHighlighted =
+    conceptSimActive &&
+    (conceptHighlight.length === 0 || conceptHighlight.includes(id));
   const showTraffic = trafficActive || isSimulating;
 
   const isCustom = nodeData.componentId === "custom";
@@ -114,9 +120,12 @@ function ComponentNodeInner({ id, data, selected }: NodeProps<ComponentNode>) {
           ? "border-rose-500/60 ring-2 ring-rose-500/20"
           : selected
             ? "border-cyan-500/80 ring-2 ring-cyan-500/30"
-            : showTraffic && status === "healthy"
-              ? "border-cyan-500/40 shadow-[0_0_20px_-6px_rgba(6,182,212,0.45)]"
-              : "border-border/70 hover:border-border"}
+            : isConceptHighlighted && conceptHighlight.length > 0
+              ? "border-sky-500/70 ring-2 ring-sky-500/30"
+              : showTraffic && status === "healthy"
+                ? "border-cyan-500/40 shadow-[0_0_20px_-6px_rgba(6,182,212,0.45)]"
+                : "border-border/70 hover:border-border"}
+        ${conceptSimActive && conceptHighlight.length > 0 && !isConceptHighlighted ? "opacity-40" : ""}
       `}
     >
       {/* Status indicator dot — only during / after an active simulation run */}

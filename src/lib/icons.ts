@@ -283,3 +283,44 @@ export const COMPONENT_ICON_DEFAULTS: Record<string, string> = {
 export function getIconComponent(name: string): IconComponent | undefined {
   return ICON_MAP[name];
 }
+
+/** Resolve Lucide icon name for a canvas / tutorial component. */
+export function resolveLucideIconName(
+  componentId: string,
+  storedIcon?: string,
+): string {
+  if (storedIcon && ICON_MAP[storedIcon]) return storedIcon;
+  return COMPONENT_ICON_DEFAULTS[componentId] ?? "Server";
+}
+
+/** Category tint styles shared by canvas nodes and tutorial diagrams. */
+export const CATEGORY_CHIP_STYLES: Record<
+  string,
+  { chip: string; icon: string; ring: string }
+> = {
+  networking: {
+    chip: "bg-blue-500/10",
+    icon: "text-blue-500 dark:text-blue-400",
+    ring: "ring-blue-500/20",
+  },
+  compute: {
+    chip: "bg-violet-500/10",
+    icon: "text-violet-500 dark:text-violet-400",
+    ring: "ring-violet-500/20",
+  },
+  storage: {
+    chip: "bg-amber-500/10",
+    icon: "text-amber-600 dark:text-amber-400",
+    ring: "ring-amber-500/20",
+  },
+  messaging: {
+    chip: "bg-emerald-500/10",
+    icon: "text-emerald-600 dark:text-emerald-400",
+    ring: "ring-emerald-500/20",
+  },
+  infrastructure: {
+    chip: "bg-cyan-500/10",
+    icon: "text-cyan-600 dark:text-cyan-400",
+    ring: "ring-cyan-500/20",
+  },
+};

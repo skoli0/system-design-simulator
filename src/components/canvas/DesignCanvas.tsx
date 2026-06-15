@@ -50,6 +50,8 @@ import { PenOverlay } from "./PenOverlay";
 import { PenToolbar } from "./PenToolbar";
 import { AlignmentGuides } from "./AlignmentGuides";
 import { copyReferenceToDesignTab } from "@/lib/loadReference";
+import { LEARN_TAB_ID } from "@/lib/conceptSimulations/constants";
+import { openConceptTutorial } from "@/lib/loadConceptSimulation";
 
 interface DesignCanvasProps {
   onPickProblem?: () => void;
@@ -79,6 +81,8 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
   const activeTabId = useCanvasStore((s) => s.activeTabId);
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const isReadOnly = activeTab?.readOnly === true;
+  const isLegacyLearnTab =
+    activeTabId === LEARN_TAB_ID && Boolean(activeTab?.conceptSimulationId);
   const isEditable = isEditableDesignTab(activeTab);
   const penMode = usePenStore((s) => s.mode);
   const penActive = penMode !== "off";
@@ -389,8 +393,8 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
 
         {!isReadOnly && <AlignmentGuides guides={alignmentGuides} />}
 
-        {/* Read-only hint for reference tabs */}
-        {isReadOnly && (
+        {/* Read-only hint for reference / concept tabs */}
+        {isReadOnly && !isLegacyLearnTab && (
           <div className="pointer-events-none absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-2">
             <div className="flex items-center gap-1.5 rounded-full border border-cyan-500/30 bg-card/90 px-3 py-1 text-[11px] font-medium text-cyan-400 shadow-sm backdrop-blur">
               <Lock className="h-3 w-3" />
@@ -404,6 +408,19 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
             >
               <Copy className="h-3 w-3" />
               Copy to design
+            </button>
+          </div>
+        )}
+
+        {isLegacyLearnTab && activeTab?.conceptSimulationId && (
+          <div className="pointer-events-none absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => openConceptTutorial(activeTab.conceptSimulationId!)}
+              className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-sky-500/30 bg-card/90 px-3 py-1.5 text-[11px] font-medium text-sky-500 shadow-sm backdrop-blur transition-colors hover:bg-sky-500/10"
+            >
+              <GraduationCap className="h-3 w-3" />
+              Open tutorial view
             </button>
           </div>
         )}

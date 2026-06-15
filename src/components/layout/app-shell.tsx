@@ -7,6 +7,8 @@ import { TopBar } from "./top-bar";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { RightPanel } from "@/components/panel/RightPanel";
 import { DesignCanvas } from "@/components/canvas/DesignCanvas";
+import { ConceptTutorialView } from "@/components/learn/ConceptTutorialView";
+import { useLearnStore } from "@/store/learnStore";
 import { useAppStore } from "@/store/appStore";
 import { useCanvasStore } from "@/store/canvasStore";
 import {
@@ -48,6 +50,7 @@ export function AppShell() {
   const interviewMode = useInterviewStore((s) => s.mode);
   const timerRunning = useInterviewStore((s) => s.timerRunning);
   const tickTimer = useInterviewStore((s) => s.tickTimer);
+  const activeTutorialId = useLearnStore((s) => s.activeTutorialId);
 
   useDesignAutoSave();
 
@@ -291,11 +294,15 @@ export function AppShell() {
           />
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            <DesignCanvas
-              onPickProblem={handlePickProblem}
-              onLoadReference={handleLoadReference}
-              onStartInterview={() => setInterviewDialogOpen(true)}
-            />
+            {activeTutorialId ? (
+              <ConceptTutorialView tutorialId={activeTutorialId} />
+            ) : (
+              <DesignCanvas
+                onPickProblem={handlePickProblem}
+                onLoadReference={handleLoadReference}
+                onStartInterview={() => setInterviewDialogOpen(true)}
+              />
+            )}
           </div>
 
           {/* Desktop inline right panel (hidden on mobile) */}
@@ -345,6 +352,7 @@ export function AppShell() {
                       setMobileSidebarOpen(false);
                     }}
                     onComponentAdded={() => setMobileSidebarOpen(false)}
+                    onLearnItemSelected={() => setMobileSidebarOpen(false)}
                     variant="mobile"
                   />
                 </div>

@@ -1,0 +1,241 @@
+"use client";
+
+import { useState, useCallback } from "react";
+import { Badge } from "@/components/ui/badge";
+import { ChevronDown, ChevronRight, Star } from "lucide-react";
+import { LEARNING_PATH, PROBLEM_CONCEPTS } from "@/data/learningPath";
+import { PROBLEMS } from "@/data/problems";
+import { useAppStore } from "@/store/appStore";
+import { selectProblemWithReference } from "@/lib/loadReference";
+
+const STORAGE_KEY = "sds-completed-problems";
+
+function getDifficultyColor(difficulty: string) {
+  switch (difficulty) {
+    case "Easy":
+      return "border-emerald-500/30 bg-emerald-500/10 text-emerald-400";
+    case "Medium":
+      return "border-amber-500/30 bg-amber-500/10 text-amber-400";
+    case "Hard":
+      return "border-rose-500/30 bg-rose-500/10 text-rose-400";
+    default:
+      return "";
+  }
+}
+
+const TIER_COLORS: Record<string, string> = {
+  Foundations: "text-emerald-400",
+  Intermediate: "text-amber-400",
+  Advanced: "text-rose-400",
+  Expert: "text-purple-400",
+};
+
+const TIER_BAR_COLORS: Record<string, string> = {
+  Foundations: "bg-emerald-500",
+  Intermediate: "bg-amber-500",
+  Advanced: "bg-rose-500",
+  Expert: "bg-purple-500",
+};
+
+function getConceptsForProblem(problemId: string): string[] {
+  return PROBLEM_CONCEPTS.find((p) => p.problemId === problemId)?.concepts ?? [];
+}
+
+interface SystemDesignsSectionProps {
+  onProblemSelected?: () => void;
+}
+
+export function SystemDesignsSection({ onProblemSelected }: SystemDesignsSectionProps) {
+  const selectedProblemId = useAppStore((s) => s.selectedProblemId);
+  const [expandedTiers, setExpandedTiers] = useState<Set<string>>(new Set(["Foundations"]));
+  const [completed, setCompleted] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  const toggleCompleted = useCallback((problemId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCompleted((prev) => {
+      const next = new Set(prev);
+      if (next.has(problemId)) {
+        next.delete(problemId);
+      } else {
+        next.add(problemId);
+      }
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify([...next]));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleTier = (name: string) => {
+    setExpandedTiers((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) {
+        next.delete(name);
+      } else {
+        next.add(name);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectProblem = (problemId: string) => {
+    selectProblemWithReference(problemId);
+    onProblemSelected?.();
+  };
+
+  let recommendedId: string | null = null;
+  for (const tier of LEARNING_PATH) {
+    for (const pid of tier.problemIds) {
+      if (!completed.has(pid)) {
+        recommendedId = pid;
+        break;
+      }
+    }
+    if (recommendedId) break;
+  }
+
+  return (
+    <div className="space-y-1">
+      {LEARNING_PATH.map((tier) => {
+        const isExpanded = expandedTiers.has(tier.name);
+        const completedCount = tier.problemIds.filter((id) => completed.has(id)).length;
+        const totalCount = tier.problemIds.length;
+        const progressPct = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
+
+        return (
+          <div key={tier.name}>
+            <button
+              onClick={() => toggleTier(tier.name)}
+              className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-muted"
+            >
+              {isExpanded ? (
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs font-semibold ${TIER_COLORS[tier.name] ?? "text-foreground/80"}`}>
+                    {tier.name}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {completedCount}/{totalCount}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">{tier.description}</p>
+                <div className="mt-1.5 h-1 w-full rounded-full bg-accent">
+                  <div
+                    className={`h-1 rounded-full transition-all ${TIER_BAR_COLORS[tier.name] ?? "bg-cyan-500"}`}
+                    style={{ width: `${progressPct}%` }}
+                  />
+                </div>
+              </div>
+            </button>
+
+            {isExpanded && (
+              <div className="ml-3 mt-1 space-y-0.5">
+                {tier.problemIds.map((pid) => {
+                  const problem = PROBLEMS.find((p) => p.id === pid);
+                  if (!problem) return null;
+                  const concepts = getConceptsForProblem(pid);
+                  const isCompleted = completed.has(pid);
+                  const isRecommended = pid === recommendedId;
+                  const isSelected = pid === selectedProblemId;
+
+                  return (
+                    <div
+                      key={pid}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleSelectProblem(pid)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleSelectProblem(pid);
+                      }}
+                      className={`flex w-full cursor-pointer flex-col gap-1 rounded-md px-2.5 py-2 text-left transition-colors ${
+                        isSelected
+                          ? "border border-border bg-muted"
+                          : isRecommended
+                            ? "border border-cyan-800/50 bg-cyan-900/10 hover:bg-cyan-900/20"
+                            : "border border-transparent hover:bg-muted"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <button
+                            onClick={(e) => toggleCompleted(pid, e)}
+                            aria-label={`Mark ${problem.title} as ${isCompleted ? "not completed" : "completed"}`}
+                            aria-pressed={isCompleted}
+                            className={`h-3.5 w-3.5 shrink-0 rounded border transition-colors ${
+                              isCompleted
+                                ? "border-cyan-500 bg-cyan-500"
+                                : "border-border hover:border-muted-foreground"
+                            }`}
+                          >
+                            {isCompleted && (
+                              <svg viewBox="0 0 14 14" className="h-full w-full text-foreground">
+                                <path
+                                  d="M3 7l3 3 5-5"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            )}
+                          </button>
+                          <span
+                            className={`truncate text-xs font-medium ${
+                              isCompleted
+                                ? "text-muted-foreground line-through"
+                                : isSelected
+                                  ? "text-cyan-500"
+                                  : "text-foreground/80"
+                            }`}
+                          >
+                            {problem.title}
+                          </span>
+                          {isRecommended && !isCompleted && (
+                            <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-400" />
+                          )}
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className={`h-4 shrink-0 px-1.5 text-[10px] font-medium ${getDifficultyColor(problem.difficulty)}`}
+                        >
+                          {problem.difficulty}
+                        </Badge>
+                      </div>
+                      {concepts.length > 0 && (
+                        <div className="ml-5 flex flex-wrap gap-1">
+                          {concepts.map((c) => (
+                            <span
+                              key={c}
+                              className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground"
+                            >
+                              {c}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
