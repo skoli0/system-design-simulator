@@ -87,3 +87,18 @@ export function pasteClipboardPayload(
 
   return { nodes, edges };
 }
+
+/** Deep-clone a full tab graph with fresh node/edge ids at the same positions. */
+export function cloneTabGraph(
+  nodes: Node[],
+  edges: Edge[],
+): { nodes: Node[]; edges: Edge[] } {
+  return pasteClipboardPayload(
+    {
+      nodes: JSON.parse(JSON.stringify(nodes)) as Node[],
+      edges: JSON.parse(JSON.stringify(edges)) as Edge[],
+      copiedAt: Date.now(),
+    },
+    { x: 0, y: 0 },
+  );
+}

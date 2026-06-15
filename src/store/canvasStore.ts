@@ -6,9 +6,11 @@ import {
   type OnNodesChange,
   type OnEdgesChange,
   type OnConnect,
+  type OnReconnect,
   applyNodeChanges,
   applyEdgeChanges,
   addEdge,
+  reconnectEdge,
 } from "@xyflow/react";
 import { pickEdgeHandles, normalizeConnection, assignHandlesToEdges } from "@/lib/edgeHandles";
 import { edgeDataForComponents } from "@/lib/edgeDefaults";
@@ -26,11 +28,13 @@ import {
 import { DEFAULT_SIMULATION_LOAD_RPS } from "@/lib/loadScale";
 import {
   buildClipboardFromSelection,
+  cloneTabGraph,
   getCanvasClipboard,
   pasteClipboardPayload,
   setCanvasClipboard,
 } from "@/lib/canvasClipboard";
 import { nextDesignTabLabel } from "@/lib/designTabNames";
+import { getProblemById } from "@/data/problems";
 import { migrateLegacyTabs } from "@/lib/tabMigration";
 import { indexedDbStorage } from "@/lib/indexedDbStorage";
 import { useSimulationStore } from "./simulationStore";
@@ -71,6 +75,8 @@ export interface CustomEdgeData {
   /** Request out + response back on the same hop (e.g. client ↔ DNS/CDN). */
   bidirectional?: boolean;
   pathStyle?: EdgePathStyle;
+  /** When true, handle ids are not auto-reassigned when nodes move. */
+  handlesPinned?: boolean;
   [key: string]: unknown;
 }
 
@@ -236,6 +242,7 @@ interface CanvasState {
   closeTab: (tabId: string) => void;
   renameTab: (tabId: string, label: string) => void;
   createNewDesignTab: (label?: string) => void;
+  duplicateReferenceToDesignTab: (tabId?: string) => boolean;
   ensureActiveDesignTab: () => string;
   updateTabRequirements: (updates: Partial<ProblemRequirements>) => void;
   updateTabCapacity: (updates: Partial<CapacitySettings>) => void;
@@ -259,6 +266,7 @@ interface CanvasState {
   onNodesChange: OnNodesChange;
   onEdgesChange: OnEdgesChange;
   onConnect: OnConnect;
+  onReconnect: OnReconnect;
   addNode: (node: Node) => void;
   addEdgeDirect: (
     source: string,
@@ -489,6 +497,75 @@ export const useCanvasStore = create<CanvasState>()(
         useTradeoffStore.getState().replaceEntries([]);
       },
 
+      duplicateReferenceToDesignTab: (tabId) => {
+        const state = get();
+        const sourceTabId = tabId ?? state.activeTabId;
+        if (!sourceTabId) return false;
+
+        const sourceTab = state.tabs.find((t) => t.id === sourceTabId);
+        if (!sourceTab?.readOnly) return false;
+
+        const sourceNodes =
+          sourceTabId === state.activeTabId ? state.nodes : sourceTab.nodes;
+        const sourceEdges =
+          sourceTabId === state.activeTabId ? state.edges : sourceTab.edges;
+        if (sourceNodes.length === 0) return false;
+
+        const { nodes, edges } = cloneTabGraph(sourceNodes, sourceEdges);
+        const baseLabel = sourceTab.label
+          .replace(/\s*\(Reference\)\s*$/i, "")
+          .trim();
+        const tabLabel =
+          baseLabel || nextDesignTabLabel(state.tabs);
+
+        const problemId = sourceTab.id.startsWith("ref-")
+          ? sourceTab.id.slice(4)
+          : undefined;
+        const problem = problemId ? getProblemById(problemId) : undefined;
+
+        const id = `design-${crypto.randomUUID().slice(0, 8)}`;
+        const now = new Date().toISOString();
+        const tab: CanvasTab = {
+          id,
+          label: tabLabel,
+          nodes: stripRuntimeFields(nodes),
+          edges,
+          requirements: problem?.requirements
+            ? { ...problem.requirements }
+            : { ...DEFAULT_DESIGN_REQUIREMENTS },
+          constraints: problem?.constraints ? [...problem.constraints] : [],
+          capacity: { ...DEFAULT_CAPACITY_SETTINGS },
+          tradeoffEntries: [],
+          scoreResult: null,
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        set((s) => {
+          const updatedTabs = s.activeTabId
+            ? snapshotActiveTabExtras(s.tabs, s.activeTabId, s.nodes, s.edges)
+            : s.tabs;
+          return {
+            tabs: [...updatedTabs, tab],
+            activeTabId: tab.id,
+            nodes: tab.nodes,
+            edges: tab.edges,
+            ...clearedSelectionState(),
+            history: [],
+            future: [],
+            isDragging: false,
+            alignmentGuides: [],
+          };
+        });
+
+        resetSimulation();
+        clearScore();
+        applyDefaultSimulationLoad();
+        useTradeoffStore.getState().replaceEntries([]);
+
+        return true;
+      },
+
       ensureActiveDesignTab: () => {
         const state = get();
         if (state.activeTabId != null) {
@@ -671,6 +748,35 @@ export const useCanvasStore = create<CanvasState>()(
             history: pushedHistory(state),
             future: [],
             nodes,
+            edges,
+          };
+        });
+      },
+      onReconnect: (oldEdge, newConnection) => {
+        set((state) => {
+          if (!newConnection.source || !newConnection.target) return state;
+          if (newConnection.source === newConnection.target) return state;
+
+          let edges = reconnectEdge(oldEdge, newConnection, state.edges, {
+            shouldReplaceId: false,
+          });
+          if (edges === state.edges) return state;
+
+          edges = edges.map((edge) =>
+            edge.id === oldEdge.id
+              ? {
+                  ...edge,
+                  data: {
+                    ...((edge.data as CustomEdgeData | undefined) ?? {}),
+                    handlesPinned: true,
+                  },
+                }
+              : edge,
+          );
+
+          return {
+            history: pushedHistory(state),
+            future: [],
             edges,
           };
         });

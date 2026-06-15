@@ -368,6 +368,35 @@ export function loadReferenceIntoTab(
   }
 }
 
+/** Copy the active (or given) read-only reference tab into a new editable design tab. */
+export function copyReferenceToDesignTab(tabId?: string): boolean {
+  const canvas = useCanvasStore.getState();
+  const sourceTabId = tabId ?? canvas.activeTabId;
+  const sourceTab = canvas.tabs.find((t) => t.id === sourceTabId);
+
+  const copied = useCanvasStore
+    .getState()
+    .duplicateReferenceToDesignTab(sourceTabId);
+  if (!copied) {
+    useAppStore
+      .getState()
+      .showToast("Open a reference tab to copy", "info");
+    return false;
+  }
+
+  const problemId = sourceTab?.id.startsWith("ref-")
+    ? sourceTab.id.slice(4)
+    : undefined;
+  if (problemId) {
+    useAppStore.getState().setSelectedProblem(problemId);
+  }
+
+  useAppStore
+    .getState()
+    .showToast("Reference copied to a new editable design", "success");
+  return true;
+}
+
 /** Select a problem and open its reference architecture on the canvas. */
 export function selectProblemWithReference(problemId: string): void {
   useAppStore.getState().setSelectedProblem(problemId);

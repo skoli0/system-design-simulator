@@ -97,6 +97,9 @@ export function normalizeConnection(connection: Connection, nodes: Node[]): Conn
 export function assignHandlesToEdges(nodes: Node[], edges: Edge[]): Edge[] {
   const nodeById = new Map(nodes.map((n) => [n.id, n]));
   return edges.map((e) => {
+    if ((e.data as { handlesPinned?: boolean } | undefined)?.handlesPinned) {
+      return e;
+    }
     const sourceNode = nodeById.get(e.source);
     const targetNode = nodeById.get(e.target);
     if (!sourceNode || !targetNode) return e;

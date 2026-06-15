@@ -19,6 +19,7 @@ import {
   StickyNote,
   GraduationCap,
   Plus,
+  Copy,
   MoreHorizontal,
   Undo2,
   Redo2,
@@ -33,7 +34,7 @@ import { usePenStore } from "@/store/penStore";
 import { PROBLEMS, getProblemById } from "@/data/problems";
 import { useCustomProblemsStore } from "@/store/customProblemsStore";
 import { type Node, useReactFlow } from "@xyflow/react";
-import { loadReferenceIntoTab, selectProblemWithReference } from "@/lib/loadReference";
+import { loadReferenceIntoTab, selectProblemWithReference, copyReferenceToDesignTab } from "@/lib/loadReference";
 import { exportAsPng, exportAsSvg, exportAsJSON } from "@/lib/exportCanvas";
 import { ConfirmDialog } from "@/components/dialogs/ConfirmDialog";
 
@@ -268,6 +269,17 @@ export function TopBar({ onSimulate, onStopSimulation, onClearCanvas, onSave, on
           </button>
         )}
 
+        {activeTabReadOnly && (
+          <button
+            onClick={() => copyReferenceToDesignTab()}
+            className="hidden shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[10px] text-cyan-600 transition-colors hover:bg-muted hover:text-cyan-500 dark:text-cyan-400 md:flex"
+            title="Copy reference to an editable design tab"
+          >
+            <Copy className="h-3 w-3" />
+            Copy to design
+          </button>
+        )}
+
         <div className="mx-1 hidden h-4 w-px bg-muted md:block" />
 
         <button
@@ -333,6 +345,15 @@ export function TopBar({ onSimulate, onStopSimulation, onClearCanvas, onSave, on
                   >
                     <Download className="h-3.5 w-3.5 text-muted-foreground" />
                     Load reference solution
+                  </button>
+                )}
+                {activeTabReadOnly && (
+                  <button
+                    onClick={() => { setMobileMoreOpen(false); copyReferenceToDesignTab(); }}
+                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-xs text-cyan-600 transition-colors hover:bg-muted dark:text-cyan-400"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    Copy reference to design
                   </button>
                 )}
                 <button

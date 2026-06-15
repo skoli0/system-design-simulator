@@ -32,7 +32,7 @@ import { useAppStore } from "@/store/appStore";
 import { useSimulationStore } from "@/store/simulationStore";
 import { getComponentById } from "@/data/components";
 import { wireDroppedNode } from "@/lib/insertNodeOnEdge";
-import { BookOpen, GraduationCap, Layers, Lock, MousePointer2, Sparkles } from "lucide-react";
+import { BookOpen, GraduationCap, Layers, Lock, MousePointer2, Sparkles, Copy } from "lucide-react";
 import { motion } from "framer-motion";
 
 // Orchestrated staggered reveal for the empty state — one deliberate page-load
@@ -49,6 +49,7 @@ import { CanvasTabBar } from "./CanvasTabBar";
 import { PenOverlay } from "./PenOverlay";
 import { PenToolbar } from "./PenToolbar";
 import { AlignmentGuides } from "./AlignmentGuides";
+import { copyReferenceToDesignTab } from "@/lib/loadReference";
 
 interface DesignCanvasProps {
   onPickProblem?: () => void;
@@ -68,6 +69,7 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
   const onNodesChange = useCanvasStore((s) => s.onNodesChange);
   const onEdgesChange = useCanvasStore((s) => s.onEdgesChange);
   const onConnect = useCanvasStore((s) => s.onConnect);
+  const onReconnect = useCanvasStore((s) => s.onReconnect);
   const alignmentGuides = useCanvasStore((s) => s.alignmentGuides);
   const addNode = useCanvasStore((s) => s.addNode);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
@@ -340,6 +342,9 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={isReadOnly ? undefined : onConnect}
+        onReconnect={isReadOnly ? undefined : onReconnect}
+        edgesReconnectable={!isReadOnly}
+        reconnectRadius={12}
         onDrop={onDrop}
         onDragOver={onDragOver}
         onPaneClick={onPaneClick}
@@ -386,9 +391,20 @@ export function DesignCanvas({ onPickProblem, onLoadReference, onStartInterview 
 
         {/* Read-only hint for reference tabs */}
         {isReadOnly && (
-          <div className="pointer-events-none absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-cyan-500/30 bg-card/90 px-3 py-1 text-[11px] font-medium text-cyan-400 shadow-sm backdrop-blur">
-            <Lock className="h-3 w-3" />
-            Read-only reference
+          <div className="pointer-events-none absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-2">
+            <div className="flex items-center gap-1.5 rounded-full border border-cyan-500/30 bg-card/90 px-3 py-1 text-[11px] font-medium text-cyan-400 shadow-sm backdrop-blur">
+              <Lock className="h-3 w-3" />
+              Read-only reference
+            </div>
+            <button
+              type="button"
+              onClick={() => copyReferenceToDesignTab()}
+              className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-border bg-card/90 px-3 py-1 text-[11px] font-medium text-foreground shadow-sm backdrop-blur transition-colors hover:bg-accent"
+              title="Copy this reference into a new editable design tab"
+            >
+              <Copy className="h-3 w-3" />
+              Copy to design
+            </button>
           </div>
         )}
       </div>

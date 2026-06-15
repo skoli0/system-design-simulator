@@ -52,12 +52,22 @@ function ComponentNodeInner({ id, data, selected }: NodeProps<ComponentNode>) {
   const [editLabel, setEditLabel] = useState(nodeData.label);
   const inputRef = useRef<HTMLInputElement>(null);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
+  const selectedEdgeIds = useCanvasStore((s) => s.selectedEdgeIds);
+  const edges = useCanvasStore((s) => s.edges);
   const isCoarse = useIsCoarsePointer();
   const { connectionInProgress, fromNodeId } = useConnection((s) => ({
     connectionInProgress: s.inProgress,
     fromNodeId: s.fromNode?.id,
   }));
-  const showHandles = selected || (connectionInProgress && fromNodeId !== id);
+  const hasSelectedEdgeConnection = edges.some(
+    (edge) =>
+      selectedEdgeIds.includes(edge.id) &&
+      (edge.source === id || edge.target === id),
+  );
+  const showHandles =
+    selected ||
+    hasSelectedEdgeConnection ||
+    (connectionInProgress && fromNodeId !== id);
 
   useEffect(() => {
     if (editing && inputRef.current) {
