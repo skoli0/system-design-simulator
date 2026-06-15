@@ -1,4 +1,5 @@
 import type { ProblemRequirements } from "@/types/problem";
+import { DEFAULT_SIMULATION_LOAD_RPS } from "@/lib/loadScale";
 
 export interface CapacitySettings {
   dau: number;
@@ -8,7 +9,7 @@ export interface CapacitySettings {
 }
 
 export const DEFAULT_DESIGN_REQUIREMENTS: ProblemRequirements = {
-  readsPerSec: 10_000,
+  readsPerSec: DEFAULT_SIMULATION_LOAD_RPS,
   writesPerSec: 1_000,
   storageGB: 1_000,
   latencyMs: 200,

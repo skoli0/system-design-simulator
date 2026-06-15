@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { DEFAULT_SIMULATION_LOAD_RPS } from "@/lib/loadScale";
 import type { SimulationResult, SimulationConfig } from "@/types/simulation";
 import type { ScoreResult } from "@/types/scoring";
 
@@ -21,7 +22,7 @@ interface SimulationState {
 }
 
 const defaultConfig: SimulationConfig = {
-  requestsPerSec: 10000,
+  requestsPerSec: DEFAULT_SIMULATION_LOAD_RPS,
   durationSec: 10,
   rampUp: true,
 };

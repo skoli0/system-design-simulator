@@ -5,10 +5,8 @@ import { getComponentById } from "@/data/components";
 import { getProblemById } from "@/data/problems";
 import { useCanvasStore, type ComponentNodeData } from "@/store/canvasStore";
 import { useAppStore } from "@/store/appStore";
-import { useSimulationStore } from "@/store/simulationStore";
 import { assignHandlesToEdges } from "@/lib/edgeHandles";
 import { edgeDataForComponents } from "@/lib/edgeDefaults";
-import { loadFromProblemRequirements } from "@/lib/loadScale";
 
 /** Fixed node footprint so handles and edges align consistently. */
 export const REF_NODE_WIDTH = 148;
@@ -370,20 +368,11 @@ export function loadReferenceIntoTab(
   }
 }
 
-/** Align simulation load with a problem's read throughput target. */
-export function syncSimulationLoadForProblem(problem: Problem): void {
-  const rps = loadFromProblemRequirements(problem.requirements.readsPerSec);
-  useSimulationStore.getState().setConfig({ requestsPerSec: rps });
-}
-
 /** Select a problem and open its reference architecture on the canvas. */
 export function selectProblemWithReference(problemId: string): void {
   useAppStore.getState().setSelectedProblem(problemId);
 
   const problem = getProblemById(problemId);
-  if (problem) {
-    syncSimulationLoadForProblem(problem);
-  }
 
   if (!problem?.referenceSolution.nodes.length) {
     if (problemId.startsWith("custom-")) {

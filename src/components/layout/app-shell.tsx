@@ -13,7 +13,7 @@ import {
   runSimulationWithAnimation,
   stopSimulation,
 } from "@/lib/simulationRunner";
-import { loadReferenceIntoTab, syncSimulationLoadForProblem } from "@/lib/loadReference";
+import { loadReferenceIntoTab } from "@/lib/loadReference";
 import { getProblemById } from "@/data/problems";
 import { rehydrateAllStores } from "@/store/hydration";
 import { requestCanvasFitView, CANVAS_LAYOUT_SETTLE_MS } from "@/lib/canvasFitView";
@@ -145,8 +145,6 @@ export function AppShell() {
     rehydrateAllStores().then(() => {
       if (initialLoadDone.current) return;
       initialLoadDone.current = true;
-      const problem = getProblemById(useAppStore.getState().selectedProblemId);
-      if (problem) syncSimulationLoadForProblem(problem);
       requestCanvasFitView(CANVAS_LAYOUT_SETTLE_MS + 100);
     });
   }, []);

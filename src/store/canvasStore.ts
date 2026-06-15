@@ -23,7 +23,7 @@ import {
   DEFAULT_DESIGN_REQUIREMENTS,
   type CapacitySettings,
 } from "@/lib/designDefaults";
-import { loadFromProblemRequirements } from "@/lib/loadScale";
+import { DEFAULT_SIMULATION_LOAD_RPS } from "@/lib/loadScale";
 import {
   buildClipboardFromSelection,
   getCanvasClipboard,
@@ -164,9 +164,8 @@ function clearScore(): void {
   sim.setShowScore(false);
 }
 
-function syncSimulationFromRequirements(requirements: ProblemRequirements): void {
-  const rps = loadFromProblemRequirements(requirements.readsPerSec);
-  useSimulationStore.getState().setConfig({ requestsPerSec: rps });
+function applyDefaultSimulationLoad(): void {
+  useSimulationStore.getState().setConfig({ requestsPerSec: DEFAULT_SIMULATION_LOAD_RPS });
 }
 
 /** Persist score + tradeoffs onto the active tab snapshot before switching away. */
@@ -189,9 +188,6 @@ function snapshotActiveTabExtras(
 function restoreTabExtras(tab: CanvasTab): void {
   useSimulationStore.getState().setScoreResult(tab.scoreResult ?? null);
   useTradeoffStore.getState().replaceEntries(tab.tradeoffEntries ?? []);
-  if (tab.requirements && !tab.readOnly) {
-    syncSimulationFromRequirements(tab.requirements);
-  }
 }
 
 export function isEditableDesignTab(tab: CanvasTab | undefined): boolean {
@@ -489,7 +485,7 @@ export const useCanvasStore = create<CanvasState>()(
 
         resetSimulation();
         clearScore();
-        syncSimulationFromRequirements(tab.requirements!);
+        applyDefaultSimulationLoad();
         useTradeoffStore.getState().replaceEntries([]);
       },
 
@@ -508,7 +504,6 @@ export const useCanvasStore = create<CanvasState>()(
           const tab = state.tabs.find((t) => t.id === state.activeTabId);
           if (!tab || tab.readOnly || !tab.requirements) return state;
           const requirements = { ...tab.requirements, ...updates };
-          syncSimulationFromRequirements(requirements);
           return {
             tabs: state.tabs.map((t) =>
               t.id === state.activeTabId ? { ...t, requirements } : t,

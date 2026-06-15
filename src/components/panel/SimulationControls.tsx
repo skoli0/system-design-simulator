@@ -15,6 +15,7 @@ import {
 } from "@/engine/bottleneckFix";
 import { rerunSimulationAtCurrentLoad } from "@/lib/simulationRunner";
 import {
+  DEFAULT_SIMULATION_LOAD_RPS,
   formatLoadRps,
   LOAD_MAX_RPS,
   LOAD_MIN_RPS,
@@ -25,7 +26,7 @@ import {
 
 const PRESETS = [
   { label: "Light", value: 1000 },
-  { label: "Medium", value: 10000 },
+  { label: "Medium", value: DEFAULT_SIMULATION_LOAD_RPS },
   { label: "Heavy", value: 100000 },
   { label: "Stress", value: 500000 },
 ];

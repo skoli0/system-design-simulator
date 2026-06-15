@@ -1,6 +1,8 @@
 export const LOAD_MIN_RPS = 100;
 export const LOAD_MAX_RPS = 500_000;
 export const LOAD_SLIDER_STEPS = 1000;
+/** Default simulation load — matches the Medium preset (10k req/s). */
+export const DEFAULT_SIMULATION_LOAD_RPS = 10_000;
 
 export function clampLoadRps(rps: number): number {
   if (!Number.isFinite(rps) || rps <= 0) return LOAD_MIN_RPS;
