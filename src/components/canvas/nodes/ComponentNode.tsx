@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useState, useCallback, useRef, useEffect } from "react";
-import { Handle, Position, useUpdateNodeInternals, type NodeProps, type Node } from "@xyflow/react";
+import { Handle, Position, useConnection, useUpdateNodeInternals, type NodeProps, type Node } from "@xyflow/react";
 import { motion } from "framer-motion";
 import type { ComponentNodeData } from "@/store/canvasStore";
 import { useCanvasStore } from "@/store/canvasStore";
@@ -53,6 +53,11 @@ function ComponentNodeInner({ id, data, selected }: NodeProps<ComponentNode>) {
   const inputRef = useRef<HTMLInputElement>(null);
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const isCoarse = useIsCoarsePointer();
+  const { connectionInProgress, fromNodeId } = useConnection((s) => ({
+    connectionInProgress: s.inProgress,
+    fromNodeId: s.fromNode?.id,
+  }));
+  const showHandles = selected || (connectionInProgress && fromNodeId !== id);
 
   useEffect(() => {
     if (editing && inputRef.current) {
@@ -95,7 +100,7 @@ function ComponentNodeInner({ id, data, selected }: NodeProps<ComponentNode>) {
       className={`
         group relative flex w-[148px] min-h-[104px] flex-col items-center justify-center gap-1 rounded-xl border bg-card/95 px-4 py-3
         shadow-[var(--shadow-e2)] backdrop-blur-sm transition-all duration-150
-        ${isBottleneck
+        ${isBottleneck && showTraffic
           ? "border-rose-500/60 ring-2 ring-rose-500/20"
           : selected
             ? "border-cyan-500/80 ring-2 ring-cyan-500/30"
@@ -104,11 +109,13 @@ function ComponentNodeInner({ id, data, selected }: NodeProps<ComponentNode>) {
               : "border-border/70 hover:border-border"}
       `}
     >
-      {/* Status indicator dot */}
-      <div
-        className={`absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full ring-2 ring-card ${statusDot}`}
-        style={{ animation: status !== 'idle' ? 'status-pulse 2s infinite' : 'none' }}
-      />
+      {/* Status indicator dot — only during / after an active simulation run */}
+      {showTraffic && (
+        <div
+          className={`absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full ring-2 ring-card ${statusDot}`}
+          style={{ animation: status !== "idle" ? "status-pulse 2s infinite" : "none" }}
+        />
+      )}
 
       {/* Icon + Label row */}
       <div className="flex items-center gap-2">
@@ -160,7 +167,7 @@ function ComponentNodeInner({ id, data, selected }: NodeProps<ComponentNode>) {
 
       {/* Utilization bar — fixed height slot so edges stay aligned during simulation */}
       <div className="mt-0.5 flex h-[14px] w-full items-center gap-1">
-        {utilization > 0 ? (
+        {showTraffic && utilization > 0 ? (
           <>
             <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
               <motion.div
@@ -179,9 +186,14 @@ function ComponentNodeInner({ id, data, selected }: NodeProps<ComponentNode>) {
         ) : null}
       </div>
 
-      {/* Handles — all four sides; larger hit area on touch devices */}
+      {/* Handles — visible when selected (or on targets while dragging a connection) */}
       {(() => {
-        const handleClass = `${isCoarse ? "!h-5 !w-5" : "!h-2 !w-2"} !rounded-full !border !border-border !bg-muted-foreground`;
+        const handleClass = [
+          isCoarse ? "!h-5 !w-5" : "!h-2 !w-2",
+          "!rounded-full !border !border-border !bg-muted-foreground",
+          "!transition-opacity !duration-150",
+          showHandles ? "!opacity-100" : "!opacity-0 !pointer-events-none",
+        ].join(" ");
         return (
           <>
             <Handle type="target" position={Position.Left} id="left" className={handleClass} />
